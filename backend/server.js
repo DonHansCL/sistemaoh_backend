@@ -39,11 +39,7 @@ app.options('*', cors());
 app.use(express.json());
 
 // Conexión a la base de datos
-mongoose.connect(process.env.MONGODB_URI, {
-  ssl: true,
-  sslValidate: true,
-  // Otros parámetros si es necesario
-}) 
+mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log("Conectado a MongoDB Atlas"))
   .catch(err => {
     console.log("Error conectando a MongoDB Atlas", err);
@@ -91,10 +87,10 @@ app.use((err, req, res, next) => {
 });
 
 // Passenger no necesita el puerto lo maneja por sí mismo
-// const PORT = process.env.PORT || 5000;
-// app.listen(PORT, () => {
-//   console.log(`Servidor corriendo en el puerto ${PORT}`);
-// });
+ const PORT = process.env.PORT || 5000;
+ app.listen(PORT, () => {
+ console.log(`Servidor corriendo en el puerto ${PORT}`);
+ });
 
 // Exportar la app para que Passenger la maneje
 module.exports = app;
