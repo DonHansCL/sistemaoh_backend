@@ -10,6 +10,8 @@ const router = express.Router();
 const Cliente = require('../models/Cliente'); // Asegúrate de importar el modelo de cliente
 const Abono = require('../models/Abonos'); // Asegúrate de importar el modelo de abono
 const mongoose = require('mongoose');
+const upload = require('../middleware/upload'); // Asegúrate de importar el middleware de multer
+
 
 // Configuración de multer para manejar el archivo CSV
 router.post('/upload', upload.single('file'), verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
@@ -193,7 +195,6 @@ function esFechaValida(fechaString) {
     fecha.getDate() === dia
   );
 }
-
 
 
 
