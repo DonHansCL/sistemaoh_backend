@@ -153,6 +153,12 @@ router.post('/upload', upload.single('file'), verifyToken, checkRole(['ADMIN', '
         continue;
       }
 
+      // Determinar el valor de total_abonado basado en el estado
+      let totalAbonado = 0;
+      if (item.estado && item.estado.trim().toLowerCase() === 'pagada') {
+        totalAbonado = parseFloat(item.monto);
+      }
+
       // Crear la factura
       const nuevaFactura = new Factura({
         numero: item.numero.trim(),
@@ -161,6 +167,7 @@ router.post('/upload', upload.single('file'), verifyToken, checkRole(['ADMIN', '
         fechaPago: item.fechaPago,
         estado: item.estado ? item.estado.trim() : 'pendiente',
         monto: parseFloat(item.monto),
+        total_abonado: totalAbonado,
       });
 
       try {
