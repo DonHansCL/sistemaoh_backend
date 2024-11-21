@@ -58,155 +58,108 @@ function convertirFecha(fechaString) {
 // Definir la ruta para cargar el archivo CSV
 router.post('/upload', upload.single('file'), verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
   const resultados = [];
-    let fila = 1;
+  let fila = 1;
 
-    if (!req.file) {
-      return res.status(400).json({ error: 'No se ha subido ningún archivo.' });
-    }
+  if (!req.file) {
+    return res.status(400).json({ error: 'No se ha subido ningún archivo.' });
+  }
 
-    const session = await mongoose.startSession();
-    session.startTransaction();
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-    try {
-      await new Promise((resolve, reject) => {
-        fs.createReadStream(req.file.path)
-          .pipe(csv({ separator: ';' }))
-          .on('data', (data) => {
-            resultados.push({
-              fila,
-              numero: data.numero ? data.numero.trim() : '',
-              clienteRut: data.clienteRut ? data.clienteRut.trim() : '',
-              fechaEmision: data.fechaEmision ? data.fechaEmision.trim() : '',
-              fechaPago: data.fechaPago ? data.fechaPago.trim() : '',
-              estado: data.estado ? data.estado.trim().toLowerCase() : '',
-              monto: data.monto ? data.monto.trim() : '',
-            });
-            fila++;
-          })
-          .on('end', () => {
-            resolve();
-          })
-          .on('error', (error) => {
-            reject(error);
-          });
-      });
+  try {
+    // Leer y procesar el archivo CSV
+    await new Promise((resolve, reject) => {
+      fs.createReadStream(req.file.path)
+        .pipe(csv())
+        .on('data', (data) => {
+          resultados.push({ ...data, fila: fila++ });
+        })
+        .on('end', resolve)
+        .on('error', reject);
+    });
 
-      const errores = [];
+    const resultadosProcesamiento = [];
 
-      for (const item of resultados) {
-        const { fila, numero, clienteRut, fechaEmision, fechaPago, estado, monto } = item;
+    for (const item of resultados) {
+      const filaActual = item.fila;
 
-        if (!numero || !clienteRut || !fechaEmision || !estado || !monto) {
-          errores.push({
-            fila,
-            estado: 'Error',
-            detalles: 'Faltan campos obligatorios.',
-          });
-          continue;
-        }
-
-        const fechaEmisionDate = convertirFecha(fechaEmision);
-        if (!fechaEmisionDate) {
-          errores.push({
-            fila,
-            estado: 'Error',
-            detalles: 'Formato de fecha de emisión inválido.',
-          });
-          continue;
-        }
-
-        let fechaPagoDate = null;
-        if (fechaPago) {
-          fechaPagoDate = convertirFecha(fechaPago);
-          if (!fechaPagoDate) {
-            errores.push({
-              fila,
-              estado: 'Error',
-              detalles: 'Formato de fecha de pago inválido.',
-            });
-            continue;
-          }
-        }
-
-        if (!['pendiente', 'pagada', 'abonada'].includes(estado)) {
-          errores.push({
-            fila,
-            estado: 'Error',
-            detalles: `Estado inválido: ${estado}.`,
-          });
-          continue;
-        }
-
-        const montoNumber = parseFloat(monto);
-        if (isNaN(montoNumber) || montoNumber < 0) {
-          errores.push({
-            fila,
-            estado: 'Error',
-            detalles: 'Monto inválido.',
-          });
-          continue;
-        }
-
-        const facturaExistente = await Factura.findOne({ numero }).session(session);
-        if (facturaExistente) {
-          errores.push({
-            fila,
-            estado: 'Error',
-            detalles: `Factura con número ${numero} ya existe.`,
-          });
-          continue;
-        }
-
-        const clienteExistente = await Cliente.findOne({ rut: clienteRut }).session(session);
-        if (!clienteExistente) {
-          errores.push({
-            fila,
-            estado: 'Error',
-            detalles: `Cliente con RUT ${clienteRut} no encontrado.`,
-          });
-          continue;
-        }
-      }
-
-      if (errores.length > 0) {
-        await session.abortTransaction();
-        session.endSession();
-
-        fs.unlinkSync(req.file.path);
-
-        return res.status(400).json({
-          message: 'Error en la carga masiva.',
-          errores,
+      // Validar campos obligatorios
+      if (!item.numero || !item.clienteRut || !item.fechaEmision || !item.monto) {
+        resultadosProcesamiento.push({
+          fila: filaActual,
+          estado: 'Error',
+          detalles: 'Campos obligatorios faltantes',
         });
+        continue;
       }
 
-      const facturasParaInsertar = resultados.map((item) => ({
+      // Verificar si la factura ya existe
+      const facturaExistente = await Factura.findOne({ numero: item.numero });
+      if (facturaExistente) {
+        resultadosProcesamiento.push({
+          fila: filaActual,
+          estado: 'Error',
+          detalles: `La factura con número ${item.numero} ya existe`,
+        });
+        continue;
+      }
+
+      // Verificar si el cliente existe
+      const clienteExistente = await Cliente.findOne({ rut: item.clienteRut });
+      if (!clienteExistente) {
+        resultadosProcesamiento.push({
+          fila: filaActual,
+          estado: 'Error',
+          detalles: `El cliente con RUT ${item.clienteRut} no existe`,
+        });
+        continue;
+      }
+
+      // Crear la factura
+      const nuevaFactura = new Factura({
         numero: item.numero,
         clienteRut: item.clienteRut,
         fechaEmision: convertirFecha(item.fechaEmision),
         fechaPago: item.fechaPago ? convertirFecha(item.fechaPago) : null,
-        estado: item.estado,
+        estado: item.estado || 'pendiente',
         monto: parseFloat(item.monto),
-      }));
+      });
 
-      await Factura.insertMany(facturasParaInsertar, { session });
-
-      await session.commitTransaction();
-      session.endSession();
-
-      fs.unlinkSync(req.file.path);
-
-      res.status(200).json({ message: 'Carga completada exitosamente.' });
-    } catch (error) {
-      await session.abortTransaction();
-      session.endSession();
-
-      console.error('Error al procesar el archivo CSV:', error);
-      fs.unlinkSync(req.file.path);
-      res.status(500).json({ error: 'Error al procesar el archivo CSV.' });
+      try {
+        await nuevaFactura.save({ session });
+        resultadosProcesamiento.push({
+          fila: filaActual,
+          estado: 'Éxito',
+          detalles: `Factura número ${item.numero} creada exitosamente`,
+        });
+      } catch (error) {
+        resultadosProcesamiento.push({
+          fila: filaActual,
+          estado: 'Error',
+          detalles: `Error al crear la factura: ${error.message}`,
+        });
+      }
     }
+
+    await session.commitTransaction();
+    session.endSession();
+
+    fs.unlinkSync(req.file.path);
+
+    res.status(200).json({
+      message: 'Carga completada',
+      resultados: resultadosProcesamiento,
+    });
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+
+    console.error('Error al procesar el archivo CSV:', error);
+    fs.unlinkSync(req.file.path);
+    res.status(500).json({ error: 'Error al procesar el archivo CSV.' });
   }
-)
+})
 
 
 
@@ -516,3 +469,4 @@ router.delete('/:id', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (r
 })
 
 module.exports = router;
+
