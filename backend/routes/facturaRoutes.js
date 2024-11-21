@@ -10,10 +10,9 @@ const router = express.Router();
 const Cliente = require('../models/Cliente'); // Asegúrate de importar el modelo de cliente
 const Abono = require('../models/Abonos'); // Asegúrate de importar el modelo de abono
 const mongoose = require('mongoose');
-const upload = require('../middleware/upload'); // Asegúrate de importar el middleware de multer
 
 // Configuración de multer para manejar el archivo CSV
-// const upload = multer({ dest: 'uploads/' });
+const upload = multer({ dest: 'uploads/' });
 
 // Función para convertir fecha de DD-MM-YYYY a objeto Date
 function convertirFecha(fechaString) {
@@ -59,185 +58,104 @@ function convertirFecha(fechaString) {
 // Definir la ruta para cargar el archivo CSV
 router.post('/upload', upload.single('file'), verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
   const resultados = [];
-  let fila = 1;
+    let fila = 1;
 
-  if (!req.file) {
-    return res.status(400).json({ error: 'No se ha subido ningún archivo.' });
-  }
+    if (!req.file) {
+      return res.status(400).json({ error: 'No se ha subido ningún archivo.' });
+    }
 
-  const session = await mongoose.startSession();
-  session.startTransaction();
+    const session = await mongoose.startSession();
+    session.startTransaction();
 
-  try {
-    // Leer y procesar el archivo CSV
-    await new Promise((resolve, reject) => {
-      fs.createReadStream(req.file.path)
-        .pipe(csv())
-        .on('data', (data) => {
-          resultados.push({ ...data, fila: fila++ });
-        })
-        .on('end', resolve)
-        .on('error', reject);
-    });
-
-    const resultadosProcesamiento = [];
-
-    for (const item of resultados) {
-      const filaActual = item.fila;
-
-      const erroresFila = [];
-
-      // Validar campos obligatorios
-      if (!item.numero) erroresFila.push('El campo "numero" es obligatorio.');
-      if (!item.clienteRut) erroresFila.push('El campo "clienteRut" es obligatorio.');
-      if (!item.fechaEmision) erroresFila.push('El campo "fechaEmision" es obligatorio.');
-      if (!item.monto) erroresFila.push('El campo "monto" es obligatorio.');
-
-      // Si hay errores en campos obligatorios, registrar el error y pasar a la siguiente fila
-      if (erroresFila.length > 0) {
-        resultadosProcesamiento.push({
-          fila: filaActual,
-          estado: 'Error',
-          detalles: erroresFila.join(' '),
-        });
-        continue;
-      }
-
-      // Validar formato de fechaEmision
-      if (!esFechaValida(item.fechaEmision)) {
-        resultadosProcesamiento.push({
-          fila: filaActual,
-          estado: 'Error',
-          detalles: `La fecha de emisión "${item.fechaEmision}" no tiene un formato válido.`,
-        });
-        continue;
-      }
-
-      // Validar formato de fechaPago si está presente y no está vacío
-      if (item.fechaPago && item.fechaPago.trim() !== '') {
-        if (!esFechaValida(item.fechaPago)) {
+    try {
+      await new Promise((resolve, reject) => {
+        fs.createReadStream(req.file.path)
+          .pipe(csv())
+          .on('data', (data) => {
+            resultados.push({ ...data, fila: fila++ });
+          })
+          .on('end', resolve)
+          .on('error', reject);
+      });
+  
+      const resultadosProcesamiento = [];
+  
+      for (const item of resultados) {
+        const filaActual = item.fila;
+  
+        // Validar campos obligatorios
+        if (!item.numero || !item.clienteRut || !item.fechaEmision || !item.monto) {
           resultadosProcesamiento.push({
             fila: filaActual,
             estado: 'Error',
-            detalles: `La fecha de pago "${item.fechaPago}" no tiene un formato válido.`,
+            detalles: 'Campos obligatorios faltantes.',
           });
           continue;
         }
-      }
-
-      // Verificar si el monto es un número válido
-      if (isNaN(parseFloat(item.monto))) {
-        resultadosProcesamiento.push({
-          fila: filaActual,
-          estado: 'Error',
-          detalles: `El monto "${item.monto}" no es un número válido.`,
+  
+        // Verificar si la factura ya existe
+        const facturaExistente = await Factura.findOne({ numero: item.numero });
+        if (facturaExistente) {
+          resultadosProcesamiento.push({
+            fila: filaActual,
+            estado: 'Error',
+            detalles: `La factura con número ${item.numero} ya existe.`,
+          });
+          continue;
+        }
+  
+        // Verificar si el cliente existe
+        const clienteExistente = await Cliente.findOne({ rut: item.clienteRut });
+        if (!clienteExistente) {
+          resultadosProcesamiento.push({
+            fila: filaActual,
+            estado: 'Error',
+            detalles: `El cliente con RUT ${item.clienteRut} no existe.`,
+          });
+          continue;
+        }
+  
+        // Crear la factura
+        const nuevaFactura = new Factura({
+          numero: item.numero,
+          clienteRut: item.clienteRut,
+          fechaEmision: convertirFecha(item.fechaEmision),
+          fechaPago: item.fechaPago ? convertirFecha(item.fechaPago) : null,
+          estado: item.estado || 'pendiente',
+          monto: parseFloat(item.monto),
         });
-        continue;
+  
+        try {
+          await nuevaFactura.save({ session });
+          resultadosProcesamiento.push({
+            fila: filaActual,
+            estado: 'Éxito',
+            detalles: `Factura número ${item.numero} creada exitosamente.`,
+          });
+        } catch (error) {
+          resultadosProcesamiento.push({
+            fila: filaActual,
+            estado: 'Error',
+            detalles: `Error al crear la factura: ${error.message}`,
+          });
+        }
       }
-
-      // Verificar si la factura ya existe
-      const facturaExistente = await Factura.findOne({ numero: item.numero });
-      if (facturaExistente) {
-        resultadosProcesamiento.push({
-          fila: filaActual,
-          estado: 'Error',
-          detalles: `La factura con número ${item.numero} ya existe.`,
-        });
-        continue;
-      }
-
-      // Verificar si el cliente existe
-      const clienteExistente = await Cliente.findOne({ rut: item.clienteRut });
-      if (!clienteExistente) {
-        resultadosProcesamiento.push({
-          fila: filaActual,
-          estado: 'Error',
-          detalles: `El cliente con RUT ${item.clienteRut} no existe.`,
-        });
-        continue;
-      }
-
-      // Crear la factura
-      const nuevaFactura = new Factura({
-        numero: item.numero,
-        clienteRut: item.clienteRut,
-        fechaEmision: convertirFecha(item.fechaEmision),
-        fechaPago: (item.fechaPago && item.fechaPago.trim() !== '') ? convertirFecha(item.fechaPago) : null,
-        estado: item.estado || 'pendiente',
-        monto: parseFloat(item.monto),
-      });
-
-      try {
-        await nuevaFactura.save({ session });
-        resultadosProcesamiento.push({
-          fila: filaActual,
-          estado: 'Éxito',
-          detalles: `Factura número ${item.numero} creada exitosamente.`,
-        });
-      } catch (error) {
-        resultadosProcesamiento.push({
-          fila: filaActual,
-          estado: 'Error',
-          detalles: `Error al crear la factura: ${error.message}`,
-        });
-      }
+  
+      await session.commitTransaction();
+      session.endSession();
+  
+      fs.unlinkSync(req.file.path);
+  
+      res.status(200).json({ resultados: resultadosProcesamiento });
+    } catch (error) {
+      await session.abortTransaction();
+      session.endSession();
+  
+      console.error('Error al procesar el archivo CSV:', error);
+      fs.unlinkSync(req.file.path);
+      res.status(500).json({ error: 'Error al procesar el archivo CSV.' });
     }
-
-    await session.commitTransaction();
-    session.endSession();
-
-    fs.unlinkSync(req.file.path);
-
-    res.status(200).json({
-      message: 'Carga completada',
-      resultados: resultadosProcesamiento,
-    });
-  } catch (error) {
-    await session.abortTransaction();
-    session.endSession();
-
-    console.error('Error al procesar el archivo CSV:', error);
-    fs.unlinkSync(req.file.path);
-    res.status(500).json({ error: 'Error al procesar el archivo CSV.' });
-  }
-});
-
-// Funciones auxiliares
-
-function convertirFecha(fechaString) {
-  // Convertir fecha de formato DD-MM-YYYY a objeto Date
-  const partes = fechaString.split('-');
-  const dia = parseInt(partes[0], 10);
-  const mes = parseInt(partes[1], 10) - 1; // Los meses en JavaScript van de 0 a 11
-  const anio = parseInt(partes[2], 10);
-
-  return new Date(anio, mes, dia);
-}
-
-function esFechaValida(fechaString) {
-  const regexFecha = /^\d{2}-\d{2}-\d{4}$/;
-  if (!regexFecha.test(fechaString)) {
-    return false;
-  }
-
-  const partes = fechaString.split('-');
-  const dia = parseInt(partes[0], 10);
-  const mes = parseInt(partes[1], 10);
-  const anio = parseInt(partes[2], 10);
-
-  // Validar rangos de día, mes y año
-  if (anio < 1000 || anio > 9999 || mes < 1 || mes > 12 || dia < 1 || dia > 31) {
-    return false;
-  }
-
-  // Crear objeto Date y verificar si es válido
-  const fecha = new Date(anio, mes - 1, dia);
-  return (
-    fecha.getFullYear() === anio &&
-    fecha.getMonth() === mes - 1 &&
-    fecha.getDate() === dia
-  );
-}
+  })
 
 
 
@@ -547,4 +465,3 @@ router.delete('/:id', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (r
 })
 
 module.exports = router;
-
