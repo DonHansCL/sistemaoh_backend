@@ -62,6 +62,7 @@ app.use('/api/abonos', abonoRoutes)
 app.use("/api/usuarios", usuarioRoutes)
 app.use('/api/honorarios', honorarioRoutes);
 app.use('/api/abonosHonorarios', abonoHonorarioRoutes);
+app.use('/uploads', express.static('uploads'))
 
 
 // Ruta de prueba para verificar la conexión
