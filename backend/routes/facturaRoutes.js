@@ -12,8 +12,51 @@ const Abono = require('../models/Abonos'); // Asegúrate de importar el modelo d
 const mongoose = require('mongoose');
 const upload = require('../middleware/upload'); // Asegúrate de importar el middleware de multer
 
-
 // Configuración de multer para manejar el archivo CSV
+// const upload = multer({ dest: 'uploads/' });
+
+// Función para convertir fecha de DD-MM-YYYY a objeto Date
+function convertirFecha(fechaString) {
+  const regex = /^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$/;
+  const match = fechaString.match(regex);
+  if (!match) return null;
+
+  let [, parte1, parte2, parte3] = match;
+
+  let dia, mes, año;
+
+  if (fechaString.includes('-')) {
+    dia = parseInt(parte1, 10);
+    mes = parseInt(parte2, 10);
+    año = parseInt(parte3, 10);
+  } else {
+    mes = parseInt(parte1, 10);
+    dia = parseInt(parte2, 10);
+    año = parseInt(parte3, 10);
+  }
+
+  if (año < 100) {
+    año += 2000;
+  }
+
+  if (mes < 1 || mes > 12 || dia < 1 || dia > 31) {
+    return null;
+  }
+
+  const fecha = new Date(año, mes - 1, dia);
+
+  if (
+    fecha.getFullYear() !== año ||
+    fecha.getMonth() !== mes - 1 ||
+    fecha.getDate() !== dia
+  ) {
+    return null;
+  }
+
+  return fecha;
+}
+
+// Definir la ruta para cargar el archivo CSV
 router.post('/upload', upload.single('file'), verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
   const resultados = [];
   let fila = 1;
