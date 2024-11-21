@@ -62,7 +62,7 @@ app.use('/api/abonos', abonoRoutes)
 app.use("/api/usuarios", usuarioRoutes)
 app.use('/api/honorarios', honorarioRoutes);
 app.use('/api/abonosHonorarios', abonoHonorarioRoutes);
-app.use('/uploads', express.static('uploads'))
+
 
 
 // Ruta de prueba para verificar la conexión
@@ -71,13 +71,7 @@ app.get('/api/test', (req, res) => {
   res.json({ message: 'Ruta de prueba exitosa' });
 })
 
-// Servir los archivos estáticos de la aplicación React
-app.use(express.static(path.join(__dirname, 'frontend', 'build')));
 
-// Cualquier ruta no reconocida servirá el index.html de React
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'frontend', 'build', 'index.html'));
-});
 
 // Manejo de errores
 app.use((err, req, res, next) => {
