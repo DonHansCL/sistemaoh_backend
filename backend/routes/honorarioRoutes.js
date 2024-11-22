@@ -83,12 +83,12 @@ router.post('/upload', upload.single('file'), verifyToken, checkRole(['ADMIN', '
     try {
       await new Promise((resolve, reject) => {
         fs.createReadStream(req.file.path)
-          .pipe(csv({ separator: ';' }))
-          .on('data', (data) => {
-            resultados.push({ ...data, fila: fila++ });
+          .pipe(csv.parse({ headers: true, delimiter: ';', trim: true }))
+          .on('error', error => reject(error))
+          .on('data', row => {
+            resultados.push({ ...row, fila: fila++ });
           })
-          .on('end', resolve)
-          .on('error', reject);
+          .on('end', rowCount => resolve(rowCount));
       });
   
       const resultadosProcesamiento = [];
@@ -106,6 +106,11 @@ router.post('/upload', upload.single('file'), verifyToken, checkRole(['ADMIN', '
         }
         if (!item.monto || item.monto.trim() === '') {
           erroresFila.push('El campo "monto" es obligatorio.');
+        }
+
+        // Validar estado si está presente
+        if (item.estado && !['pendiente', 'pagada'].includes(item.estado.trim().toLowerCase())) {
+          erroresFila.push('El campo "estado" debe ser "pendiente" o "pagada".');
         }
 
         // Si hay errores, registrar y continuar con la siguiente fila
@@ -126,6 +131,8 @@ router.post('/upload', upload.single('file'), verifyToken, checkRole(['ADMIN', '
           detalles: `La fecha de emisión "${item.fechaEmision}" no tiene un formato válido. Debe ser DD-MM-YYYY.`,
         });
         continue;
+      } else {
+        item.fechaEmision = convertirFecha(item.fechaEmision);
       }
 
       // Validar formato de fechaPago si está presente
@@ -152,7 +159,20 @@ router.post('/upload', upload.single('file'), verifyToken, checkRole(['ADMIN', '
           detalles: `El monto "${item.monto}" no es un número válido.`,
         });
         continue;
+      } else {
+        item.monto = parseFloat(item.monto);
       }
+
+
+      // Determinar el valor de total_abonado basado en el estado
+      let totalAbonado = 0;
+        if (item.estado && item.estado.trim().toLowerCase() === 'pagada') {
+          totalAbonado = item.monto;
+        } else if (item.total_abonado && !isNaN(parseFloat(item.total_abonado))) {
+          totalAbonado = parseFloat(item.total_abonado);
+        } else {
+          totalAbonado = 0;
+        }
 
        // Verificar si el cliente existe
        const clienteExistente = await Cliente.findOne({ rut: item.clienteRut });
@@ -165,8 +185,7 @@ router.post('/upload', upload.single('file'), verifyToken, checkRole(['ADMIN', '
          continue;
        }
 
-
-         // **Nueva Validación: Verificar duplicados por clienteRut y fechaEmision**
+       // **Nueva Validación: Verificar duplicados por clienteRut y fechaEmision**
        const honorarioExistente = await Honorario.findOne({
         clienteRut: item.clienteRut.trim(),
         fechaEmision: convertirFecha(item.fechaEmision),
@@ -180,20 +199,17 @@ router.post('/upload', upload.single('file'), verifyToken, checkRole(['ADMIN', '
         });
         continue;
       }
+
        
-       // Determinar el valor de total_abonado basado en el estado
-       let totalAbonado = 0;
-       if (item.estado && item.estado.trim().toLowerCase() === 'pagada') {
-         totalAbonado = parseFloat(item.monto);
-       }
+       
 
 
       // Insertar todos los honorarios en la base de datos dentro de la transacción
       const nuevoHonorario = new Honorario ({
         clienteRut: item.clienteRut.trim(),
-        fechaEmision: convertirFecha(item.fechaEmision),
+        fechaEmision: item.fechaEmision,
         fechaPago: item.fechaPago,
-        estado: item.estado ? item.estado.trim() : 'pendiente',
+        estado: item.estado ? item.estado.trim().toLowerCase() : 'pendiente',
         monto: parseFloat(item.monto),
         total_abonado: totalAbonado,
       })
