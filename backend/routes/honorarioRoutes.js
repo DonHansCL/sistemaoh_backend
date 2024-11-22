@@ -13,46 +13,30 @@ const upload = multer({ dest: 'uploads/' });
 
 // Función para convertir fecha de DD-MM-YYYY a objeto Date
 function convertirFecha(fechaString) {
-  // Regex para verificar formatos DD-MM-YYYY o MM/DD/YYYY
-  const regex = /^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$/;
-  const match = fechaString.match(regex);
-  if (!match) return null;
-
-  let [ , parte1, parte2, parte3 ] = match;
-
-  let dia, mes, año;
-
-  // Determinar el formato basado en el separador
-  if (fechaString.includes('-')) {
-    // Asumir formato DD-MM-YYYY
-    dia = parseInt(parte1, 10);
-    mes = parseInt(parte2, 10);
-    año = parseInt(parte3, 10);
-  } else {
-    // Asumir formato MM/DD/YYYY
-    mes = parseInt(parte1, 10);
-    dia = parseInt(parte2, 10);
-    año = parseInt(parte3, 10);
-  }
-
-  // Ajustar año si es de dos dígitos
-  if (año < 100) {
-    año += 2000;
-  }
-
-    // Verificar rangos válidos para mes y día
-if (mes < 1 || mes > 12 || dia < 1 || dia > 31) {
-  return null;
+  const partes = fechaString.split('-');
+  const dia = parseInt(partes[0], 10);
+  const mes = parseInt(partes[1], 10) - 1; // Los meses en JavaScript van de 0 a 11
+  const anio = parseInt(partes[2], 10);
+  return new Date(anio, mes, dia);
 }
 
-  const fecha = new Date(año, mes - 1, dia);
-
-  // Validar que la fecha sea correcta
-  if (fecha.getFullYear() !== año || fecha.getMonth() !== (mes - 1) || fecha.getDate() !== dia) {
-    return null;
+function esFechaValida(fechaString) {
+  const regexFecha = /^\d{2}-\d{2}-\d{4}$/;
+  if (!regexFecha.test(fechaString)) {
+    return false;
   }
 
-  return fecha;
+  const partes = fechaString.split('-');
+  const dia = parseInt(partes[0], 10);
+  const mes = parseInt(partes[1], 10);
+  const anio = parseInt(partes[2], 10);
+
+  const fecha = new Date(anio, mes - 1, dia);
+  return (
+    fecha.getFullYear() === anio &&
+    fecha.getMonth() === mes - 1 &&
+    fecha.getDate() === dia
+  );
 }
 
 
@@ -96,128 +80,123 @@ router.post('/upload', upload.single('file'), verifyToken, checkRole(['ADMIN', '
   const session = await mongoose.startSession();
     session.startTransaction();
 
-  try {
-    // Leer y parsear el archivo CSV utilizando Promesas
-    await new Promise((resolve, reject) => {
-      fs.createReadStream(req.file.path)
-        .pipe(csv({ separator: ';' }))
-        .on('data', (data) => {
-          resultados.push({
-            fila,
-            clienteRut: data.clienteRut ? data.clienteRut.trim() : '',
-            fechaEmision: data.fechaEmision ? data.fechaEmision.trim() : '',
-            fechaPago: data.fechaPago ? data.fechaPago.trim() : '',
-            estado: data.estado ? data.estado.trim().toLowerCase() : '',
-            monto: data.monto ? data.monto.trim() : '',
-          });
-          fila++;
-        })
-        .on('end', () => {
-          resolve();
-        })
-        .on('error', (error) => {
-          reject(error);
-        });
-    });
-
-    const errores = [];
+    try {
+      await new Promise((resolve, reject) => {
+        fs.createReadStream(req.file.path)
+          .pipe(csv({ separator: ';' }))
+          .on('data', (data) => {
+            resultados.push({ ...data, fila: fila++ });
+          })
+          .on('end', resolve)
+          .on('error', reject);
+      });
+  
+      const resultadosProcesamiento = [];
 
     // Validar todas las filas antes de insertar
       for (const item of resultados) {
-        const { fila, clienteRut, fechaEmision, fechaPago, estado, monto } = item;
+        const filaActual = item.fila;
+        const erroresFila = [];
 
-        // Validaciones básicas
-        if (!clienteRut || !fechaEmision || !estado || !monto) {
-          errores.push({
-            fila,
-            estado: 'Error',
-            detalles: 'Faltan campos obligatorios.',
-          });
-          continue;
+        if (!item.clienteRut || item.clienteRut.trim() === '') {
+          erroresFila.push('El campo "clienteRut" es obligatorio.');
+        }
+        if (!item.fechaEmision || item.fechaEmision.trim() === '') {
+          erroresFila.push('El campo "fechaEmision" es obligatorio.');
+        }
+        if (!item.monto || item.monto.trim() === '') {
+          erroresFila.push('El campo "monto" es obligatorio.');
         }
 
-        // Validar formato de fecha de emisión
-        const fechaEmisionDate = convertirFecha(fechaEmision);
-        if (!fechaEmisionDate) {
-          errores.push({
-            fila,
-            estado: 'Error',
-            detalles: 'Formato de fecha de emisión inválido.',
-          });
-          continue;
-        }
-
-        // Validar formato de fecha de pago si existe
-        let fechaPagoDate = null;
-        if (fechaPago) {
-          fechaPagoDate = convertirFecha(fechaPago);
-          if (!fechaPagoDate) {
-            errores.push({
-              fila,
-              estado: 'Error',
-              detalles: 'Formato de fecha de pago inválido.',
-            });
-            continue;
-          }
-        }
-
-        // Validar estado
-        if (!['pendiente', 'pagada', 'abonada'].includes(estado)) {
-          errores.push({
-            fila,
-            estado: 'Error',
-            detalles: `Estado inválido: ${estado}.`,
-          });
-          continue;
-        }
-
-        // Validar monto
-        const montoNumber = parseFloat(monto);
-        if (isNaN(montoNumber) || montoNumber < 0) {
-          errores.push({
-            fila,
-            estado: 'Error',
-            detalles: 'Monto inválido.',
-          });
-          continue;
-        }
-
-        // Verificar existencia del cliente
-        const clienteExistente = await Cliente.findOne({ rut: clienteRut }).session(session);
-        if (!clienteExistente) {
-          errores.push({
-            fila,
-            estado: 'Error',
-            detalles: `Cliente con RUT ${clienteRut} no encontrado.`,
-          });
-          continue;
-        }
-      }
-
-      if (errores.length > 0) {
-        // Si hay errores, abortar la transacción y devolver los errores
-        await session.abortTransaction();
-        session.endSession();
-
-        // Eliminar el archivo temporal
-        fs.unlinkSync(req.file.path);
-
-        return res.status(400).json({
-          message: 'Error en la carga masiva.',
-          errores,
+        // Si hay errores, registrar y continuar con la siguiente fila
+      if (erroresFila.length > 0) {
+        resultadosProcesamiento.push({
+          fila: filaActual,
+          estado: 'Error',
+          detalles: erroresFila.join(' '),
         });
+        continue;
       }
+
+      // Validar formato de fechaEmision
+      if (!esFechaValida(item.fechaEmision)) {
+        resultadosProcesamiento.push({
+          fila: filaActual,
+          estado: 'Error',
+          detalles: `La fecha de emisión "${item.fechaEmision}" no tiene un formato válido. Debe ser DD-MM-YYYY.`,
+        });
+        continue;
+      }
+
+      // Validar formato de fechaPago si está presente
+      if (item.fechaPago && item.fechaPago.trim() !== '') {
+        if (!esFechaValida(item.fechaPago)) {
+          resultadosProcesamiento.push({
+            fila: filaActual,
+            estado: 'Error',
+            detalles: `La fecha de pago "${item.fechaPago}" no tiene un formato válido. Debe ser DD-MM-YYYY.`,
+          });
+          continue;
+        } else {
+          item.fechaPago = convertirFecha(item.fechaPago);
+        }
+      } else {
+        item.fechaPago = null; // Establecer como null si está vacío
+      }
+
+      // Validar que el monto sea un número válido
+      if (isNaN(parseFloat(item.monto))) {
+        resultadosProcesamiento.push({
+          fila: filaActual,
+          estado: 'Error',
+          detalles: `El monto "${item.monto}" no es un número válido.`,
+        });
+        continue;
+      }
+
+       // Verificar si el cliente existe
+       const clienteExistente = await Cliente.findOne({ rut: item.clienteRut });
+       if (!clienteExistente) {
+         resultadosProcesamiento.push({
+           fila: filaActual,
+           estado: 'Error',
+           detalles: `El cliente con RUT ${item.clienteRut} no existe.`,
+         });
+         continue;
+       }
+       
+       // Determinar el valor de total_abonado basado en el estado
+       let totalAbonado = 0;
+       if (item.estado && item.estado.trim().toLowerCase() === 'pagada') {
+         totalAbonado = parseFloat(item.monto);
+       }
+
 
       // Insertar todos los honorarios en la base de datos dentro de la transacción
-      const honorariosParaInsertar = resultados.map((item) => ({
-        clienteRut: item.clienteRut,
+      const nuevoHonorario = new Honorario ({
+        clienteRut: item.clienteRut.trim(),
         fechaEmision: convertirFecha(item.fechaEmision),
-        fechaPago: item.fechaPago ? convertirFecha(item.fechaPago) : null,
-        estado: item.estado,
+        fechaPago: item.fechaPago,
+        estado: item.estado ? item.estado.trim() : 'pendiente',
         monto: parseFloat(item.monto),
-      }));
+        total_abonado: totalAbonado,
+      })
 
-      await Honorario.insertMany(honorariosParaInsertar, { session });
+      try {
+        await nuevoHonorario.save({ session });
+        resultadosProcesamiento.push({
+          fila: filaActual,
+          estado: 'Éxito',
+          detalles: `Honorario creado exitosamente.`,
+        });
+      } catch (error) {
+        resultadosProcesamiento.push({
+          fila: filaActual,
+          estado: 'Error',
+          detalles: `Error al crear el Honorario: ${error.message}`,
+        });
+      }
+    }
 
       // Commit de la transacción
       await session.commitTransaction();
@@ -227,7 +206,7 @@ router.post('/upload', upload.single('file'), verifyToken, checkRole(['ADMIN', '
       fs.unlinkSync(req.file.path);
 
       // Enviar la respuesta con la confirmación de éxito
-      res.status(200).json({ message: 'Carga completada exitosamente.' });
+      res.status(200).json({ resultados: resultadosProcesamiento });
     } catch (error) {
       // Abort de la transacción en caso de error
       await session.abortTransaction();
