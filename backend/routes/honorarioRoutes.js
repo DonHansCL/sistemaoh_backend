@@ -84,10 +84,9 @@ router.post('/upload', upload.single('file'), verifyToken, checkRole(['ADMIN', '
       // Leer y procesar el CSV
       await new Promise((resolve, reject) => {
         fs.createReadStream(req.file.path)
-          .pipe(csv({ separator: ';', headers: true, trim: true }))
+          .pipe(csv({ separator: ';' }))
           .on('data', (data) => {
-            resultados.push({ ...data, fila });
-            fila++;
+            resultados.push({ ...data, fila: fila++ });           
           })
           .on('end', resolve)
           .on('error', reject);
