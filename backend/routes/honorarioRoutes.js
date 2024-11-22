@@ -84,7 +84,7 @@ router.post('/upload', upload.single('file'), verifyToken, checkRole(['ADMIN', '
       // Leer y procesar el CSV
       await new Promise((resolve, reject) => {
         fs.createReadStream(req.file.path)
-           .pipe(csv({ separator: ';', headers: true, trim: true }))
+          .pipe(csv({ separator: ';', headers: true, trim: true }))
           .on('data', (data) => {
             resultados.push({ ...data, fila });
             fila++;
@@ -136,20 +136,20 @@ router.post('/upload', upload.single('file'), verifyToken, checkRole(['ADMIN', '
         continue;
       }
 
-      // Validar formato de fechaPago si está presente
+      const fechaEmisionObj = convertirFecha(item.fechaEmision);
+
+      // Validar y convertir fecha de pago si está presente
+      let fechaPagoObj = null;
       if (item.fechaPago && item.fechaPago.trim() !== '') {
         if (!esFechaValida(item.fechaPago)) {
           resultadosProcesamiento.push({
             fila: filaActual,
             estado: 'Error',
-            detalles: `La fecha de pago "${item.fechaPago}" no tiene un formato válido. Debe ser DD-MM-YYYY.`,
+            detalles: 'El campo "fechaPago" tiene un formato inválido.',
           });
           continue;
-        } else {
-          item.fechaPago = convertirFecha(item.fechaPago);
         }
-      } else {
-        item.fechaPago = null; // Establecer como null si está vacío
+        fechaPagoObj = convertirFecha(item.fechaPago);
       }
 
       // Validar que el monto sea un número válido
@@ -186,20 +186,20 @@ router.post('/upload', upload.single('file'), verifyToken, checkRole(['ADMIN', '
          continue;
        }
 
-       // **Nueva Validación: Verificar duplicados por clienteRut y fechaEmision**
-       const honorarioExistente = await Honorario.findOne({
+       // Verificar duplicados
+      const honorarioExistente = await Honorario.findOne({
         clienteRut: item.clienteRut,
         fechaEmision: fechaEmisionObj,
       }).session(session);
+
       if (honorarioExistente) {
         resultadosProcesamiento.push({
           fila: filaActual,
           estado: 'Error',
-          detalles: `Ya existe un honorario para el cliente Rut "${item.clienteRut}" con la fecha de emisión "${item.fechaEmision}".`,
+          detalles: `Ya existe un honorario para el cliente RUT "${item.clienteRut}" con la fecha de emisión "${item.fechaEmision}".`,
         });
         continue;
       }
-
        
        
 
