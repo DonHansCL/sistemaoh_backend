@@ -13,11 +13,13 @@ const upload = multer({ dest: 'uploads/' });
 
 // Función para convertir fecha de DD-MM-YYYY a objeto Date
 function convertirFecha(fechaString) {
-  const partes = fechaString.split('-');
-  const dia = parseInt(partes[0], 10);
-  const mes = parseInt(partes[1], 10) - 1; // Los meses en JavaScript van de 0 a 11
-  const anio = parseInt(partes[2], 10);
-  return new Date(anio, mes, dia);
+  const [dia, mes, anio] = fechaString.split('-');
+
+  // Crear una fecha en formato ISO (AAAA-MM-DD)
+  const fechaISO = `${anio}-${mes}-${dia}`;
+
+  // Retornar la fecha asegurando que se interprete correctamente
+  return new Date(fechaISO);
 }
 
 function esFechaValida(fechaString) {
@@ -189,14 +191,15 @@ router.post('/upload', upload.single('file'), verifyToken, checkRole(['ADMIN', '
       const honorarioExistente = await Honorario.findOne({
         clienteRut: item.clienteRut,
         fechaEmision: fechaEmisionObj,
+        monto: parseFloat(item.monto),
       }).session(session);
 
       if (honorarioExistente) {
         resultadosProcesamiento.push({
           fila: filaActual,
           estado: 'Error',
-          detalles: `Ya existe un honorario para el cliente RUT "${item.clienteRut}" con la fecha de emisión "${item.fechaEmision}".`,
-        });
+          detalles: `Honorario a ${item.clienteRut}, ${item.fechaEmision} y ${item.monto} ya existe.`,
+  });
         continue;
       }
        
