@@ -83,13 +83,14 @@ router.post('/upload', upload.single('file'), verifyToken, checkRole(['ADMIN', '
     try {
       await new Promise((resolve, reject) => {
         fs.createReadStream(req.file.path)
-          .pipe(csv.parse({ headers: true, delimiter: ';', trim: true }))
-          .on('error', error => reject(error))
-          .on('data', row => {
-            resultados.push({ ...row, fila: fila++ });
+          .pipe(csv.parse({ separator: ';', headers: true , trim: true }))
+          .on('data', (data) => {
+            resultados.push({ ...data, fila });
+            fila++;
           })
-          .on('end', rowCount => resolve(rowCount));
-      });
+          .on('end', resolve)
+          .on('error', reject);
+      })
   
       const resultadosProcesamiento = [];
 
