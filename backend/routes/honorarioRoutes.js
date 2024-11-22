@@ -312,7 +312,7 @@ router.get('/:id', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req,
 
 
 // Obtener honorarios con filtrado opcional por rango de fechas
-router.get('/', verifyToken, checkRole(['ADMIN', 'USER']), async (req, res) => {
+router.get('/', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
   const { year, month, startDate, endDate } = req.query;
 
   let filter = {};
