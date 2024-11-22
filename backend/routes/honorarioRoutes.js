@@ -81,9 +81,10 @@ router.post('/upload', upload.single('file'), verifyToken, checkRole(['ADMIN', '
     session.startTransaction();
 
     try {
+      // Leer y procesar el CSV
       await new Promise((resolve, reject) => {
         fs.createReadStream(req.file.path)
-          .pipe(csv.parse({ separator: ';', headers: true , trim: true }))
+          .pipe(csv({ separator: ';', headers: true, trim: true }))
           .on('data', (data) => {
             resultados.push({ ...data, fila });
             fila++;
@@ -126,14 +127,13 @@ router.post('/upload', upload.single('file'), verifyToken, checkRole(['ADMIN', '
 
       // Validar formato de fechaEmision
       if (!esFechaValida(item.fechaEmision)) {
+        erroresFila.push('El campo "fechaEmision" tiene un formato inválido.');
         resultadosProcesamiento.push({
           fila: filaActual,
           estado: 'Error',
-          detalles: `La fecha de emisión "${item.fechaEmision}" no tiene un formato válido. Debe ser DD-MM-YYYY.`,
+          detalles: erroresFila.join(' '),
         });
         continue;
-      } else {
-        item.fechaEmision = convertirFecha(item.fechaEmision);
       }
 
       // Validar formato de fechaPago si está presente
@@ -188,10 +188,9 @@ router.post('/upload', upload.single('file'), verifyToken, checkRole(['ADMIN', '
 
        // **Nueva Validación: Verificar duplicados por clienteRut y fechaEmision**
        const honorarioExistente = await Honorario.findOne({
-        clienteRut: item.clienteRut.trim(),
-        fechaEmision: convertirFecha(item.fechaEmision),
-      });
-
+        clienteRut: item.clienteRut,
+        fechaEmision: fechaEmisionObj,
+      }).session(session);
       if (honorarioExistente) {
         resultadosProcesamiento.push({
           fila: filaActual,
