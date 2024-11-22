@@ -13,13 +13,11 @@ const upload = multer({ dest: 'uploads/' });
 
 // Función para convertir fecha de DD-MM-YYYY a objeto Date
 function convertirFecha(fechaString) {
-  const [dia, mes, anio] = fechaString.split('-');
-
-  // Crear una fecha en formato ISO (AAAA-MM-DD)
-  const fechaISO = `${anio}-${mes}-${dia}`;
-
-  // Retornar la fecha asegurando que se interprete correctamente
-  return new Date(fechaISO);
+  const partes = fechaString.split('-');
+  const dia = parseInt(partes[0], 10);
+  const mes = parseInt(partes[1], 10) - 1; // Months are zero-based
+  const anio = parseInt(partes[2], 10);
+  return new Date(anio, mes, dia);
 }
 
 function esFechaValida(fechaString) {
@@ -190,7 +188,7 @@ router.post('/upload', upload.single('file'), verifyToken, checkRole(['ADMIN', '
        // Verificar duplicados
       const honorarioExistente = await Honorario.findOne({
         clienteRut: item.clienteRut,
-        fechaEmision: fechaEmisionObj,
+        fechaEmision: convertirFecha(item.fechaEmision),
         monto: parseFloat(item.monto),
       }).session(session);
 
@@ -209,7 +207,7 @@ router.post('/upload', upload.single('file'), verifyToken, checkRole(['ADMIN', '
       // Insertar todos los honorarios en la base de datos dentro de la transacción
       const nuevoHonorario = new Honorario ({
         clienteRut: item.clienteRut.trim(),
-        fechaEmision: item.fechaEmision,
+        fechaEmision: convertirFecha(item.fechaEmision),
         fechaPago: item.fechaPago,
         estado: item.estado ? item.estado.trim().toLowerCase() : 'pendiente',
         monto: parseFloat(item.monto),
