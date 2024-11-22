@@ -164,6 +164,22 @@ router.post('/upload', upload.single('file'), verifyToken, checkRole(['ADMIN', '
          });
          continue;
        }
+
+
+         // **Nueva Validación: Verificar duplicados por clienteRut y fechaEmision**
+       const honorarioExistente = await Honorario.findOne({
+        clienteRut: item.clienteRut.trim(),
+        fechaEmision: convertirFecha(item.fechaEmision),
+      });
+
+      if (honorarioExistente) {
+        resultadosProcesamiento.push({
+          fila: filaActual,
+          estado: 'Error',
+          detalles: `Ya existe un honorario para el cliente Rut "${item.clienteRut}" con la fecha de emisión "${item.fechaEmision}".`,
+        });
+        continue;
+      }
        
        // Determinar el valor de total_abonado basado en el estado
        let totalAbonado = 0;
