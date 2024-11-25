@@ -245,6 +245,10 @@ router.get('/rut/:rut', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async 
     
     res.json(facturas);
 
+     if (!facturas.length) {
+      return res.json([]);
+    }
+
    if (!facturas.length) {
       return res.status(404).json({ message: 'No se encontraron facturas para este cliente.' });
     }
