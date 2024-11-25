@@ -259,14 +259,14 @@ router.get('/rut/:rut', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async 
     const cliente = await Cliente.findOne({ rut });
 
     if (!cliente) {
-      return res.status(404).json({ message: 'Cliente no encontrado.' });
+      return res.json([]);
     }
 
     // Buscar honorarios con clienteRut igual al RUT del cliente
     const honorarios = await Honorario.find({ clienteRut: cliente.rut });
 
     if (!honorarios.length) {
-      return res.status(404).json({ message: 'No se encontraron honorarios para este cliente.' });
+      return res.json([]);
     }
 
     // Agregar el nombre del cliente manualmente
