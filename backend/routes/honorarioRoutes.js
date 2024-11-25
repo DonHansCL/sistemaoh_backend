@@ -265,10 +265,6 @@ router.get('/rut/:rut', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async 
     // Buscar honorarios con clienteRut igual al RUT del cliente
     const honorarios = await Honorario.find({ clienteRut: cliente.rut });
 
-    if (!honorarios.length) {
-      return res.json([]);
-    }
-
     // Agregar el nombre del cliente manualmente
     const honorariosConCliente = honorarios.map(honorario => ({
       ...honorario.toObject(),
