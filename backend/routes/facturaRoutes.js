@@ -333,26 +333,58 @@ router.get('/:facturaId', verifyToken, checkRole(['ADMIN', 'FACTURACION']), asyn
 // Obtener todas las facturas, con filtrado opcional por rango de fechas o por año/mes
 router.get('/', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
   try {
-    const { startDate, endDate, year, month } = req.query;
+    //const { startDate, endDate, year, month } = req.query;
     // console.log('startDate:', startDate, 'endDate:', endDate, "año", year, "mes", month)
+
+    const { fechaInicio, fechaFin, estado, year, month } = req.query;
+
     let query = {};
 
+    // Filtrar por rango de fechas (fechaInicio y fechaFin)
+if (fechaInicio && fechaFin) {
+  const inicio = new Date(fechaInicio);
+  const fin = new Date(fechaFin);
+
+  // Validar fechas
+  if (!isNaN(inicio) && !isNaN(fin)) {
+      query.fechaEmision = { $gte: inicio, $lte: fin };
+  } else {
+      return res.status(400).json({ error: 'Fechas de inicio o fin inválidas.' });
+  }
+}
+
+// Filtrar por estado si no es 'Todas'
+if (estado && estado !== 'Todas') {
+  // Suponiendo que los estados se almacenan en minúsculas en la base de datos
+  query.estado = estado.toLowerCase();
+}
+
+if (year && month) {
+      const inicioMes = new Date(year, month - 1, 1); // Primer día del mes
+      const finMes = new Date(year, month, 0); // Último día del mes
+      query.fechaEmision = { $gte: inicioMes, $lte: finMes };
+  }
+
+
+
+    // ANTES DE FILTRAR POR FECHAS Y ESTADO
+
     // Si se envían startDate y endDate, se filtran las facturas por ese rango de fechas
-    if (startDate && endDate) {
-        const fechaInicio = new Date(startDate); // Asegúrate de que estas conversiones son correctas
-        const fechaFin = new Date(endDate);
-        if (isNaN(fechaInicio) || isNaN(fechaFin)) {
-          return res.status(400).json({ error: 'Fechas no válidas' });
-      }
-      // Ajusta la comparación para el campo correcto
-        query.fechaEmision = { $gte: fechaInicio, $lte: fechaFin };
-    } 
+    // if (startDate && endDate) {
+    //     const fechaInicio = new Date(startDate); // Asegúrate de que estas conversiones son correctas
+    //     const fechaFin = new Date(endDate);
+    //     if (isNaN(fechaInicio) || isNaN(fechaFin)) {
+    //       return res.status(400).json({ error: 'Fechas no válidas' });
+    //   }
+    //   // Ajusta la comparación para el campo correcto
+    //     query.fechaEmision = { $gte: fechaInicio, $lte: fechaFin };
+    // } 
     // Si se envían year y month, se filtran las facturas por ese año y mes
-    else if (year && month) {
-        const inicioMes = new Date(year, month - 1, 1); // Primer día del mes
-        const finMes = new Date(year, month, 0); // Último día del mes
-        query.fechaEmision = { $gte: inicioMes, $lte: finMes };
-    }
+    // else if (year && month) {
+    //     const inicioMes = new Date(year, month - 1, 1); // Primer día del mes
+    //     const finMes = new Date(year, month, 0); // Último día del mes
+    //     query.fechaEmision = { $gte: inicioMes, $lte: finMes };
+    // }
 
     // Obtener las facturas filtradas
     const facturas = await Factura.find(query); // Utiliza el objeto query para filtrar
