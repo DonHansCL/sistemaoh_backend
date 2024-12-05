@@ -193,9 +193,8 @@ router.post('/upload', upload.single('file'), verifyToken, checkRole(['ADMIN', '
 
     res.status(200).json({ resultados: resultadosProcesamiento });
   } catch (error) {
-    if (session.inTransaction()) {
-      await session.abortTransaction();
-    }
+  if (session.inTransaction()) {
+     await session.abortTransaction();
     session.endSession();
 
     console.error('Error al procesar el archivo CSV:', error);
