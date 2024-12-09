@@ -71,40 +71,75 @@ router.post('/', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, r
 // Similarmente, crear rutas para los resúmenes de honorarios
 router.get('/resumen-honorarios', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
   try {
-    const honorariosPagadasMes = await Honorario.aggregate([
+    const today = new Date();
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+
+    // **Honorarios Pagados Este Mes**
+    const honorariosPagadasMes = await Honorario.countDocuments({
+      estado: 'pagada',
+      fechaPago: { $gte: startOfMonth, $lte: endOfMonth }
+    });
+
+    // **Honorarios Pendientes**
+    const honorariosPendientes = await Honorario.countDocuments({
+      estado: { $in: ['pendiente', 'abonada'] }
+    });
+
+    // **Honorarios Totales**
+    const honorariosTotales = await Honorario.countDocuments({});
+
+    // **Total Honorado**
+    const totalHonoradosResult = await Honorario.aggregate([
+      {
+        $group: {
+          _id: null,
+          total: { $sum: "$monto" }
+        }
+      }
+    ]);
+    const totalHonorados = totalHonoradosResult.length > 0 ? totalHonoradosResult[0].total : 0;
+
+    // **Total Abonos Honorarios**
+    const totalAbonosHonorariosResult = await AbonoHonorario.aggregate([
+      {
+        $group: {
+          _id: null,
+          total: { $sum: "$monto" }
+        }
+      }
+    ]);
+    const totalAbonosHonorarios = totalAbonosHonorariosResult.length > 0 ? totalAbonosHonorariosResult[0].total : 0;
+
+    // **Total Adeudado Honorarios**
+    const totalAdeudadoHonorariosResult = await Honorario.aggregate([
       {
         $match: {
-          estado: 'pagada',
-          fechaPago: {
-            $gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
-            $lte: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0)
-          }
+          estado: { $in: ['pendiente', 'abonada'] }
         }
       },
-      { $count: "total" }
+      {
+        $group: {
+          _id: null,
+          total: { $sum: "$monto" }
+        }
+      }
     ]);
+    const totalAdeudadoHonorarios = totalAdeudadoHonorariosResult.length > 0 ? totalAdeudadoHonorariosResult[0].total : 0;
 
-    const honorariosPendientes = await Honorario.countDocuments({ estado: 'pendiente' });
-    const honorariosTotales = await Honorario.countDocuments({});
-    const totalHonorados = await Honorario.aggregate([
-      { $group: { _id: null, total: { $sum: "$monto" } } }
-    ]);
-    const totalAbonosHonorarios = await AbonoHonorario.aggregate([
-      { $group: { _id: null, total: { $sum: "$monto" } } }
-    ]);
-    const totalAdeudadoHonorarios = totalHonorados[0]?.total - totalAbonosHonorarios[0]?.total || 0;
-
-    res.json({
-      honorariosPagadasMes: honorariosPagadasMes[0]?.total || 0,
+    const resumenHonorarios = {
+      honorariosPagadasMes,
       honorariosPendientes,
       honorariosTotales,
-      totalHonorados: totalHonorados[0]?.total || 0,
-      totalAbonosHonorarios: totalAbonosHonorarios[0]?.total || 0,
+      totalHonorados,
+      totalAbonosHonorarios,
       totalAdeudadoHonorarios
-    });
+    };
+
+    res.json(resumenHonorarios);
   } catch (error) {
     console.error('Error al obtener resumen de honorarios:', error);
-    res.status(500).json({ error: 'Error al obtener resumen de honorarios.' });
+    res.status(500).json({ error: 'Error al obtener resumen de honorarios.', detalles: error.message });
   }
 });
 
