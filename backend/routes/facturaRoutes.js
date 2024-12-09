@@ -521,14 +521,18 @@ router.get('/resumen', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (
     ]);
     const totalAdeudado = totalFacturado[0]?.total - totalAbonos[0]?.total || 0;
 
-    res.json({
+  const resumen = {
       facturasPagadasMes: facturasPagadasMes[0]?.total || 0,
       facturasPendientes,
       facturasTotales,
       totalFacturado: totalFacturado[0]?.total || 0,
       totalAbonos: totalAbonos[0]?.total || 0,
       totalAdeudado
-    });
+    };
+
+    console.log('Respuesta del resumen de facturas:', resumen); // Agrega este log
+
+    res.json(resumen);
   } catch (error) {
     console.error('Error al obtener resumen de facturas:', error);
     res.status(500).json({ error: 'Error al obtener resumen de facturas.' });
