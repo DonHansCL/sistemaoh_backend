@@ -498,44 +498,44 @@ router.put('/:id', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req,
 // Ruta para obtener resúmenes de facturas
 router.get('/resumen', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
   try {
-    const facturasPagadasMes = await Factura.aggregate([
-      {
-        $match: {
-          estado: 'pagada',
-          fechaPago: {
-            $gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
-            $lte: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0)
-          }
-        }
-      },
-      { $count: "total" }
-    ]);
+    const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    const endOfMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0);
+
+    const facturasPagadasMes = await Factura.countDocuments({
+      estado: 'pagada',
+      fechaPago: { $gte: startOfMonth, $lte: endOfMonth }
+    });
 
     const facturasPendientes = await Factura.countDocuments({ estado: 'pendiente' });
     const facturasTotales = await Factura.countDocuments({});
-    const totalFacturado = await Factura.aggregate([
-      { $group: { _id: null, total: { $sum: "$monto" } } }
-    ]);
-    const totalAbonos = await Abono.aggregate([
-      { $group: { _id: null, total: { $sum: "$monto" } } }
-    ]);
-    const totalAdeudado = totalFacturado[0]?.total - totalAbonos[0]?.total || 0;
 
-  const resumen = {
-      facturasPagadasMes: facturasPagadasMes[0]?.total || 0,
+    const totalFacturadoResult = await Factura.aggregate([
+      { $group: { _id: null, total: { $sum: "$monto" } } }
+    ]);
+    const totalFacturado = totalFacturadoResult.length > 0 ? totalFacturadoResult[0].total : 0;
+
+    const totalAbonosResult = await Abono.aggregate([
+      { $group: { _id: null, total: { $sum: "$monto" } } }
+    ]);
+    const totalAbonos = totalAbonosResult.length > 0 ? totalAbonosResult[0].total : 0;
+
+    const totalAdeudado = totalFacturado - totalAbonos;
+
+    const resumen = {
+      facturasPagadasMes,
       facturasPendientes,
       facturasTotales,
-      totalFacturado: totalFacturado[0]?.total || 0,
-      totalAbonos: totalAbonos[0]?.total || 0,
+      totalFacturado,
+      totalAbonos,
       totalAdeudado
     };
 
-    console.log('Respuesta del resumen de facturas:', resumen); // Agrega este log
+    console.log('Resumen de facturas:', resumen);
 
     res.json(resumen);
   } catch (error) {
     console.error('Error al obtener resumen de facturas:', error);
-    res.status(500).json({ error: 'Error al obtener resumen de facturas.' });
+    res.status(500).json({ error: 'Error al obtener resumen de facturas.', detalles: error.message });
   }
 });
 
