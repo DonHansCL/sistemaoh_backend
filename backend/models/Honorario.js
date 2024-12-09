@@ -20,4 +20,6 @@ honorarioSchema.pre('deleteOne', { document: true, query: false }, async functio
   }
 });
 
+honorarioSchema.index({ estado: 1, fechaPago: 1 })
+
 module.exports = mongoose.model('Honorario', honorarioSchema);
