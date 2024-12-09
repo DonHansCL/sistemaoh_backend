@@ -47,28 +47,67 @@ function esFechaValida(fechaString) {
 // Ruta para obtener resúmenes de facturas
 router.get('/resumen', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
   try {
-    const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-    const endOfMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0);
+    const today = new Date();
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
 
+    // **Facturas Pagadas Este Mes**
+    // Contar facturas en estado 'pagada' con fechaPago dentro del mes actual
     const facturasPagadasMes = await Factura.countDocuments({
       estado: 'pagada',
       fechaPago: { $gte: startOfMonth, $lte: endOfMonth }
     });
 
-    const facturasPendientes = await Factura.countDocuments({ estado: 'pendiente' });
+    // **Facturas Pendientes**
+    // Contar facturas con estado 'pendiente' o 'abonada'
+    const facturasPendientes = await Factura.countDocuments({
+      estado: { $in: ['pendiente', 'abonada'] }
+    });
+
+    // **Facturas Totales**
+    // Contar todas las facturas
     const facturasTotales = await Factura.countDocuments({});
 
+    // **Total Facturado**
+    // Sumar 'monto' de todas las facturas
     const totalFacturadoResult = await Factura.aggregate([
-      { $group: { _id: null, total: { $sum: "$monto" } } }
+      {
+        $group: {
+          _id: null,
+          total: { $sum: "$monto" }
+        }
+      }
     ]);
     const totalFacturado = totalFacturadoResult.length > 0 ? totalFacturadoResult[0].total : 0;
 
+    // **Total Abonos**
+    // Sumar 'monto' de todos los abonos
     const totalAbonosResult = await Abono.aggregate([
-      { $group: { _id: null, total: { $sum: "$monto" } } }
+      {
+        $group: {
+          _id: null,
+          total: { $sum: "$monto" }
+        }
+      }
     ]);
     const totalAbonos = totalAbonosResult.length > 0 ? totalAbonosResult[0].total : 0;
 
-    const totalAdeudado = totalFacturado - totalAbonos;
+    // **Total Adeudado**
+    // Sumar 'monto' de facturas en estado 'pendiente' o 'abonada'
+    const totalAdeudadoResult = await Factura.aggregate([
+      {
+        $match: {
+          estado: { $in: ['pendiente', 'abonada'] }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: "$monto" }
+        }
+      }
+    ]);
+    const totalAdeudado = totalAdeudadoResult.length > 0 ? totalAdeudadoResult[0].total : 0;
 
     const resumen = {
       facturasPagadasMes,
@@ -78,8 +117,6 @@ router.get('/resumen', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (
       totalAbonos,
       totalAdeudado
     };
-
-    console.log('Resumen de facturas:', resumen);
 
     res.json(resumen);
   } catch (error) {
