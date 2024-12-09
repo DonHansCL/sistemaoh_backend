@@ -3,11 +3,11 @@ const Abono = require('./Abonos');
 
 const facturaSchema = new mongoose.Schema({
   numero: { type: String, required: true, unique: true },
-  clienteRut: { type: String, required: true },
-  fechaEmision: { type: Date, required: true },
-  fechaPago: { type: Date },
-  estado: { type: String, enum: ['pendiente', 'pagada', 'abonada'], default: 'pendiente' },
-  total_abonado: { type: Number, default: 0, min: 0 }, // Para llevar el control del monto abonado
+  clienteRut: { type: String, required: true, index: true }, // Índice agregado
+  fechaEmision: { type: Date, required: true, index: true }, // Índice agregado
+  fechaPago: { type: Date, index: true }, // Índice agregado
+  estado: { type: String, enum: ['pendiente', 'pagada', 'abonada'], default: 'pendiente', index: true }, // Índice agregado
+  total_abonado: { type: Number, default: 0, min: 0 },
   monto: { type: Number, required: true, min: 0 },
 });
 
