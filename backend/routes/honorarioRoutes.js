@@ -355,6 +355,50 @@ router.get('/', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, re
 })
 
 
+
+// Similarmente, crear rutas para los resúmenes de honorarios
+router.get('/resumen-honorarios', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
+  try {
+    const honorariosPagadasMes = await Honorario.aggregate([
+      {
+        $match: {
+          estado: 'pagada',
+          fechaPago: {
+            $gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+            $lte: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0)
+          }
+        }
+      },
+      { $count: "total" }
+    ]);
+
+    const honorariosPendientes = await Honorario.countDocuments({ estado: 'pendiente' });
+    const honorariosTotales = await Honorario.countDocuments({});
+    const totalHonorados = await Honorario.aggregate([
+      { $group: { _id: null, total: { $sum: "$monto" } } }
+    ]);
+    const totalAbonosHonorarios = await AbonoHonorario.aggregate([
+      { $group: { _id: null, total: { $sum: "$monto" } } }
+    ]);
+    const totalAdeudadoHonorarios = totalHonorados[0]?.total - totalAbonosHonorarios[0]?.total || 0;
+
+    res.json({
+      honorariosPagadasMes: honorariosPagadasMes[0]?.total || 0,
+      honorariosPendientes,
+      honorariosTotales,
+      totalHonorados: totalHonorados[0]?.total || 0,
+      totalAbonosHonorarios: totalAbonosHonorarios[0]?.total || 0,
+      totalAdeudadoHonorarios
+    });
+  } catch (error) {
+    console.error('Error al obtener resumen de honorarios:', error);
+    res.status(500).json({ error: 'Error al obtener resumen de honorarios.' });
+  }
+});
+
+
+
+
 // Actualizar un honorario existente por ID
 router.put('/:id', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
   const { id } = req.params;
