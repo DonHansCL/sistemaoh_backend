@@ -495,6 +495,48 @@ router.put('/:id', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req,
 })
 
 
+// Ruta para obtener resúmenes de facturas
+router.get('/resumen', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
+  try {
+    const facturasPagadasMes = await Factura.aggregate([
+      {
+        $match: {
+          estado: 'pagada',
+          fechaPago: {
+            $gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+            $lte: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0)
+          }
+        }
+      },
+      { $count: "total" }
+    ]);
+
+    const facturasPendientes = await Factura.countDocuments({ estado: 'pendiente' });
+    const facturasTotales = await Factura.countDocuments({});
+    const totalFacturado = await Factura.aggregate([
+      { $group: { _id: null, total: { $sum: "$monto" } } }
+    ]);
+    const totalAbonos = await Abono.aggregate([
+      { $group: { _id: null, total: { $sum: "$monto" } } }
+    ]);
+    const totalAdeudado = totalFacturado[0]?.total - totalAbonos[0]?.total || 0;
+
+    res.json({
+      facturasPagadasMes: facturasPagadasMes[0]?.total || 0,
+      facturasPendientes,
+      facturasTotales,
+      totalFacturado: totalFacturado[0]?.total || 0,
+      totalAbonos: totalAbonos[0]?.total || 0,
+      totalAdeudado
+    });
+  } catch (error) {
+    console.error('Error al obtener resumen de facturas:', error);
+    res.status(500).json({ error: 'Error al obtener resumen de facturas.' });
+  }
+});
+
+
+
 
 // Actualizar una factura abonada existente por ID, cambio el estado a abonado y el monto_abonado
 router.put('/abonar/:facturaId', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
