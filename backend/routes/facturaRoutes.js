@@ -607,6 +607,22 @@ router.put('/abonar/:facturaId', verifyToken, checkRole(['ADMIN', 'FACTURACION']
   }
 })
 
+// Eliminar múltiples facturas
+router.delete('/bulk-delete', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
+  const { ids } = req.body;
+  
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: 'No se proporcionaron IDs de facturas para eliminar.' });
+  }
+  
+  try {
+    const result = await Factura.deleteMany({ _id: { $in: ids } });
+    res.json({ message: `${result.deletedCount} factura(s) eliminada(s) exitosamente.` });
+  } catch (error) {
+    console.error('Error al eliminar facturas masivamente:', error);
+    res.status(500).json({ error: 'Error al eliminar facturas masivamente.' });
+  }
+});
 
 
 // Eliminar una factura por su número
