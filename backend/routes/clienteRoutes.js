@@ -169,26 +169,42 @@ router.get('/', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, re
   // Nueva Ruta: Obtener clientes paginados
 // URL: /paginated?page=1&limit=25
 router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
-  const { page = 1, limit = 25 } = req.query;
+    let { page = 1, limit = 25, searchTerm = '' } = req.query;
 
-  try {
-      const clientes = await Cliente.find()
-          .skip((page - 1) * limit)
-          .limit(parseInt(limit, 10));
+    // Convertir a número
+    page = parseInt(page, 10);
+    limit = parseInt(limit, 10);
 
-      const total = await Cliente.countDocuments();
+    // Crear filtro de búsqueda
+    const searchRegex = new RegExp(searchTerm, 'i'); // Búsqueda insensible a mayúsculas y minúsculas
+    const filter = searchTerm
+        ? { 
+            $or: [
+                { nombre: { $regex: searchRegex } },
+                { rut: { $regex: searchRegex } }
+            ]
+          }
+        : {};
 
-      res.json({
-          data: clientes,
-          total,
-          page: parseInt(page, 10),
-          limit: parseInt(limit, 10),
-      });
-  } catch (error) {
-      console.error('Error al obtener clientes paginados:', error);
-      res.status(500).json({ message: 'Error al obtener clientes paginados' });
-  }
+    try {
+        const clientes = await Cliente.find(filter)
+            .skip((page - 1) * limit)
+            .limit(limit);
+
+        const total = await Cliente.countDocuments(filter);
+
+        res.json({
+            data: clientes,
+            total,
+            page,
+            limit,
+        });
+    } catch (error) {
+        console.error('Error al obtener clientes paginados:', error);
+        res.status(500).json({ message: 'Error al obtener clientes paginados' });
+    }
 });
+
 
 
 // Actualizar un cliente
