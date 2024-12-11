@@ -166,6 +166,31 @@ router.get('/', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, re
     }
   });
 
+  // Nueva Ruta: Obtener clientes paginados
+// URL: /paginated?page=1&limit=25
+router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
+  const { page = 1, limit = 25 } = req.query;
+
+  try {
+      const clientes = await Cliente.find()
+          .skip((page - 1) * limit)
+          .limit(parseInt(limit, 10));
+
+      const total = await Cliente.countDocuments();
+
+      res.json({
+          data: clientes,
+          total,
+          page: parseInt(page, 10),
+          limit: parseInt(limit, 10),
+      });
+  } catch (error) {
+      console.error('Error al obtener clientes paginados:', error);
+      res.status(500).json({ message: 'Error al obtener clientes paginados' });
+  }
+});
+
+
 // Actualizar un cliente
 router.put('/:id', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
     const { nombre, rut, direccion, email, saldoPendiente } = req.body;
