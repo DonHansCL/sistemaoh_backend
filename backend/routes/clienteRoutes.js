@@ -169,40 +169,132 @@ router.get('/', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, re
   // Nueva Ruta: Obtener clientes paginados
 // URL: /paginated?page=1&limit=25
 router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
-    let { page = 1, limit = 25, searchTerm = '' } = req.query;
+  let { page = 1, limit = 25, searchTerm = '', sortField = 'nombre', sortOrder = 'asc' } = req.query;
 
-    // Convertir a número
-    page = parseInt(page, 10);
-    limit = parseInt(limit, 10);
+  // Convertir a número
+  page = parseInt(page, 10);
+  limit = parseInt(limit, 10);
 
-    // Crear filtro de búsqueda
-    const searchRegex = new RegExp(searchTerm, 'i'); // Búsqueda insensible a mayúsculas y minúsculas
-    const filter = searchTerm
-        ? { 
-            $or: [
-                { nombre: { $regex: searchRegex } },
-                { rut: { $regex: searchRegex } }
-            ]
-          }
-        : {};
-
-    try {
-        const clientes = await Cliente.find(filter)
-            .skip((page - 1) * limit)
-            .limit(limit);
-
-        const total = await Cliente.countDocuments(filter);
-
-        res.json({
-            data: clientes,
-            total,
-            page,
-            limit,
-        });
-    } catch (error) {
-        console.error('Error al obtener clientes paginados:', error);
-        res.status(500).json({ message: 'Error al obtener clientes paginados' });
+  // Crear filtro de búsqueda
+  const searchRegex = new RegExp(searchTerm, 'i'); // Búsqueda insensible a mayúsculas y minúsculas
+  const matchStage = searchTerm
+  ? { 
+      $match: {
+          $or: [
+              { nombre: { $regex: searchRegex } },
+              { rut: { $regex: searchRegex } }
+          ]
+      }
     }
+  : { $match: {} };
+
+ // Crear objeto de sort
+ const sortOptions = {};
+ const allowedSortFields = ['nombre', 'rut', 'direccion', 'email', 'saldoPendiente']; // Define campos permitidos para ordenar
+ if (allowedSortFields.includes(sortField)) {
+     sortOptions[sortField] = sortOrder === 'asc' ? 1 : -1;
+ } else {
+     sortOptions['nombre'] = 1; // Orden predeterminado
+ }
+
+ try {
+     // Pipeline de agregación
+     const pipeline = [
+         matchStage,
+         {
+             $lookup: {
+                 from: 'facturas', // Nombre de la colección en minúsculas y plural
+                 localField: 'rut',
+                 foreignField: 'rut',
+                 as: 'facturas'
+             }
+         },
+         {
+             $addFields: {
+                 facturasPendientes: {
+                     $filter: {
+                         input: '$facturas',
+                         as: 'factura',
+                         cond: { $in: ['$$factura.estado', ['pendiente', 'abonada']] }
+                     }
+                 }
+             }
+         },
+         {
+             $addFields: {
+                 saldoPendiente: {
+                     $sum: {
+                         $map: {
+                             input: '$facturasPendientes',
+                             as: 'factura',
+                             in: { $subtract: ['$$factura.monto', { $ifNull: ['$$factura.total_abonado', 0] }] }
+                         }
+                     }
+                 },
+                 totalAbonado: {
+                     $sum: {
+                         $map: {
+                             input: '$facturasPendientes',
+                             as: 'factura',
+                             in: { $ifNull: ['$$factura.total_abonado', 0] }
+                         }
+                     }
+                 },
+                 cantidadPendiente: { $size: '$facturasPendientes' }
+             }
+         },
+         {
+             $project: {
+                 facturas: 0,
+                 facturasPendientes: 0
+             }
+         },
+         {
+             $sort: sortOptions
+         },
+         {
+             $facet: {
+                 metadata: [{ $count: 'total' }, { $addFields: { page } }],
+                 data: [{ $skip: (page - 1) * limit }, { $limit: limit }]
+             }
+         },
+         {
+             $unwind: '$metadata'
+         },
+         {
+             $project: {
+                 data: 1,
+                 total: '$metadata.total',
+                 page: '$metadata.page',
+                 limit: limit
+             }
+         }
+     ];
+
+     const result = await Cliente.aggregate(pipeline);
+
+     if (result.length === 0) {
+         return res.json({
+             data: [],
+             total: 0,
+             page,
+             limit,
+         });
+     }
+
+     const { data, total, page: currentPage, limit: perPage } = result[0];
+
+     res.json({
+         data,
+         total,
+         page: currentPage,
+         limit: perPage,
+     });
+
+ } catch (error) {
+     console.error('Error al obtener clientes paginados:', error);
+     res.status(500).json({ message: 'Error al obtener clientes paginados' });
+ }
 });
 
 
