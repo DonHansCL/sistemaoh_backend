@@ -175,6 +175,9 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
   page = parseInt(page, 10);
   limit = parseInt(limit, 10);
 
+  if (isNaN(page) || page < 1) page = 1;
+  if (isNaN(limit) || limit < 1) limit = 25;
+
   // Crear filtro de búsqueda
   const searchRegex = new RegExp(searchTerm, 'i'); // Búsqueda insensible a mayúsculas y minúsculas
   const matchStage = searchTerm
@@ -266,7 +269,7 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
                  data: 1,
                  total: '$metadata.total',
                  page: '$metadata.page',
-                 limit: limit
+                 
              }
          }
      ];
@@ -282,13 +285,13 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
          });
      }
 
-     const { data, total, page: currentPage, limit: perPage } = result[0];
+     const { data, total, page: currentPage } = result[0];
 
      res.json({
          data,
          total,
          page: currentPage,
-         limit: perPage,
+         limit,
      });
 
  } catch (error) {
