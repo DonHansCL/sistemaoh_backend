@@ -204,8 +204,8 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
          {
              $lookup: {
                  from: 'facturas', // Nombre de la colección en minúsculas y plural
-                 localField: 'clienteRut',
-                 foreignField: 'rut',
+                 localField: 'rut',
+                 foreignField: 'clienteRut',
                  as: 'facturas'
              }
          },
