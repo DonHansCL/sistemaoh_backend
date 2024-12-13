@@ -128,7 +128,6 @@ router.get('/resumen', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (
 
 
 
-
 // Definir la ruta para cargar el archivo CSV
 router.post('/upload', upload.single('file'), verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
   const resultados = [];
@@ -280,7 +279,7 @@ router.post('/upload', upload.single('file'), verifyToken, checkRole(['ADMIN', '
 
     res.status(200).json({ resultados: resultadosProcesamiento });
   } catch (error) {
-  await session.abortTransaction();
+    await session.abortTransaction();
     session.endSession();
 
     console.error('Error al procesar el archivo CSV:', error);
@@ -328,14 +327,13 @@ router.get('/rut/:rut', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async 
     const { rut } = req.params;
     
     const facturas = await Factura.find({ clienteRut: rut });
-
     
     res.json(facturas);
 
-   
+
   } catch (error) {
     console.error(error);
-    res.status(400).json({ message: 'Error al obtener facturas.', error: error.message });
+    res.status(500).json({ message: 'Error al obtener facturas.', error: error.message });
   }
 });
 
@@ -403,17 +401,6 @@ router.get('/:facturaId', verifyToken, checkRole(['ADMIN', 'FACTURACION']), asyn
       res.status(500).json({ error: 'Error interno del servidor' });
   }
 })
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -580,6 +567,32 @@ router.put('/:id', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req,
     res.status(400).json({ error: error.message });
   }
 })
+
+
+
+// Ruta para pagar masivamente facturas
+router.put('/pagar-masivo', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
+  const { facturaIds } = req.body;
+
+  if (!Array.isArray(facturaIds) || facturaIds.length === 0) {
+    return res.status(400).json({ error: 'No se proporcionaron IDs de facturas.' });
+  }
+
+  try {
+    const result = await Factura.updateMany(
+      { _id: { $in: facturaIds }, estado: { $ne: 'pagada' } },
+      { $set: { estado: 'pagada', fechaPago: new Date() } }
+    );
+
+    res.json({
+      message: `${result.nModified} factura(s) actualizada(s) a pagada.`,
+    });
+  } catch (error) {
+    console.error('Error al pagar masivamente facturas:', error);
+    res.status(500).json({ error: 'Error al pagar masivamente facturas.' });
+  }
+});
+
 
 
 // Actualizar una factura abonada existente por ID, cambio el estado a abonado y el monto_abonado
