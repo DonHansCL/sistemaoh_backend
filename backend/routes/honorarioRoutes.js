@@ -146,8 +146,6 @@ router.get('/resumen-honorarios', verifyToken, checkRole(['ADMIN', 'FACTURACION'
 
 
 
-
-
 // Carga masiva de honorarios desde CSV
 router.post('/upload', upload.single('file'), verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
   const resultados = [];
@@ -346,6 +344,7 @@ router.get('/rut/:rut', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async 
     // Buscar honorarios con clienteRut igual al RUT del cliente
     const honorarios = await Honorario.find({ clienteRut: cliente.rut });
 
+
     // Agregar el nombre del cliente manualmente
     const honorariosConCliente = honorarios.map(honorario => ({
       ...honorario.toObject(),
@@ -355,7 +354,7 @@ router.get('/rut/:rut', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async 
     res.json(honorariosConCliente);
   } catch (error) {
     console.error(error);
-    res.status(400).json({ message: 'Error al obtener honorarios.', error: error.message });
+    res.status(500).json({ message: 'Error al obtener honorarios.', error: error.message });
   }
 })
 
@@ -389,7 +388,7 @@ router.get('/:id', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req,
 
 
 // Obtener honorarios con filtrado opcional por rango de fechas
-router.get('/', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
+router.get('/', verifyToken, checkRole(['ADMIN', 'USER', 'FACTURACION']), async (req, res) => {
   const { year, month, startDate, endDate } = req.query;
 
   let filter = {};
@@ -527,6 +526,30 @@ router.put('/:id', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req,
 })
 
 
+// Ruta para pagar masivamente honorarios
+router.put('/pagar-masivo', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
+  const { honorarioIds } = req.body;
+
+  if (!Array.isArray(honorarioIds) || honorarioIds.length === 0) {
+    return res.status(400).json({ error: 'No se proporcionaron IDs de honorarios.' });
+  }
+
+  try {
+    const result = await Honorario.updateMany(
+      { _id: { $in: honorarioIds }, estado: { $ne: 'pagado' } },
+      { $set: { estado: 'pagado', fechaPago: new Date() } }
+    );
+
+    res.json({
+      message: `${result.nModified} honorario(s) actualizado(s) a pagado.`,
+    });
+  } catch (error) {
+    console.error('Error al pagar masivamente honorarios:', error);
+    res.status(500).json({ error: 'Error al pagar masivamente honorarios.' });
+  }
+});
+
+
 // Actualizar un honorario abonado existente por ID
 router.put('/abonar/:honorarioId', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
   const { honorarioId } = req.params;
@@ -589,5 +612,27 @@ router.delete('/:id', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (r
     res.status(400).json({ error: error.message });
   }
 })
+
+
+// Ruta para eliminar masivamente honorarios
+router.delete('/eliminar-masivo', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
+  const { honorarioIds } = req.body;
+
+  if (!Array.isArray(honorarioIds) || honorarioIds.length === 0) {
+    return res.status(400).json({ error: 'No se proporcionaron IDs de honorarios.' });
+  }
+
+  try {
+    const result = await Honorario.deleteMany({ _id: { $in: honorarioIds } });
+
+    res.json({
+      message: `${result.deletedCount} honorario(s) eliminado(s) exitosamente.`,
+    });
+  } catch (error) {
+    console.error('Error al eliminar masivamente honorarios:', error);
+    res.status(500).json({ error: 'Error al eliminar masivamente honorarios.' });
+  }
+});
+
 
 module.exports = router;
