@@ -532,35 +532,25 @@ router.put('/:id', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req,
 router.put('/pagar-masivo', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
   const { honorarioIds } = req.body;
 
-  // Agregar logging para verificar el contenido de req.body
-  console.log('Received pagar-masivo request with honorarioIds:', honorarioIds);
-
   if (!Array.isArray(honorarioIds) || honorarioIds.length === 0) {
     return res.status(400).json({ error: 'No se proporcionaron IDs de honorarios.' });
   }
 
-   // Validar que todos los IDs sean válidos ObjectId
-   const esValido = honorarioIds.every(id => mongoose.Types.ObjectId.isValid(id));
-   console.log('All honorarioIds valid:', esValido);
+  // Validar que todos los IDs sean válidos ObjectId
+  const esValido = honorarioIds.every(id => mongoose.Types.ObjectId.isValid(id));
+  console.log('All honorarioIds valid:', esValido);
   if (!esValido) {
     return res.status(400).json({ error: 'Algunos IDs de honorarios son inválidos.' });
   }
 
   try {
-    // Verificar que todos los honorarios existen y tienen un cliente válido
+    // Verificar que todos los honorarios existen
     const honorarios = await Honorario.find({ _id: { $in: honorarioIds } });
     if (honorarios.length !== honorarioIds.length) {
       return res.status(400).json({ error: 'Algunos honorarios no fueron encontrados.' });
     }
 
-    // Verificar que todos los clientes existen
-    const clienteRuts = honorarios.map(honorario => honorario.clienteRut);
-    const clientes = await Cliente.find({ rut: { $in: clienteRuts } });
-    if (clientes.length !== clienteRuts.length) {
-      return res.status(400).json({ error: 'Cliente no encontrado para algunos honorarios.' });
-    }
-
-    // Actualizar los honorarios a estado 'pagada'
+    // Actualizar los honorarios a estado 'pagada' y asignar fechaPago
     const result = await Honorario.updateMany(
       { _id: { $in: honorarioIds }, estado: { $ne: 'pagada' } },
       { $set: { estado: 'pagada', fechaPago: new Date() } }
@@ -571,7 +561,7 @@ router.put('/pagar-masivo', verifyToken, checkRole(['ADMIN', 'FACTURACION']), as
     });
   } catch (error) {
     console.error('Error al pagar masivamente honorarios:', error);
-    res.status(500).json({ error: 'Error al pagar masivamente honorarios.' });
+    res.status(500).json({ error: 'Error al pagar masivamente honorarios.', detalles: error.message });
   }
 });
 
