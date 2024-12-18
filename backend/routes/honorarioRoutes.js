@@ -532,6 +532,9 @@ router.put('/:id', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req,
 router.put('/pagar-masivo', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
   const { honorarioIds } = req.body;
 
+   // Agregar logging para verificar el contenido de req.body
+  console.log('Received pagar-masivo request with honorarioIds:', honorarioIds);
+
   if (!Array.isArray(honorarioIds) || honorarioIds.length === 0) {
     return res.status(400).json({ error: 'No se proporcionaron IDs de honorarios.' });
   }
@@ -546,6 +549,7 @@ router.put('/pagar-masivo', verifyToken, checkRole(['ADMIN', 'FACTURACION']), as
   try {
     // Verificar que todos los honorarios existen
     const honorarios = await Honorario.find({ _id: { $in: honorarioIds } });
+    console.log('Found honorarios:', honorarios.length);
     if (honorarios.length !== honorarioIds.length) {
       return res.status(400).json({ error: 'Algunos honorarios no fueron encontrados.' });
     }
