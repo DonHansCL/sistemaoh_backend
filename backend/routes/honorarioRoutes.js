@@ -541,15 +541,18 @@ router.put('/pagar-masivo', verifyToken, checkRole(['ADMIN', 'FACTURACION']), as
 
    // Validar que todos los IDs sean válidos ObjectId
    const esValido = honorarioIds.every(id => mongoose.Types.ObjectId.isValid(id));
-   if (!esValido) {
-     return res.status(400).json({ error: 'Algunos IDs de honorarios son inválidos.' });
-   }
+   console.log('All honorarioIds valid:', esValido);
+  if (!esValido) {
+    return res.status(400).json({ error: 'Algunos IDs de honorarios son inválidos.' });
+  }
 
   try {
     const result = await Honorario.updateMany(
       { _id: { $in: honorarioIds }, estado: { $ne: 'pagada' } },
       { $set: { estado: 'pagada', fechaPago: new Date() } }
     );
+
+    console.log(`${result.nModified} honorario(s) actualizado(s) a pagada.`);
 
     res.json({
       message: `${result.nModified} honorario(s) actualizado(s) a pagada.`,
@@ -559,7 +562,6 @@ router.put('/pagar-masivo', verifyToken, checkRole(['ADMIN', 'FACTURACION']), as
     res.status(500).json({ error: 'Error al pagar masivamente honorarios.' });
   }
 });
-
 
 
 // Actualizar un honorario abonado existente por ID
