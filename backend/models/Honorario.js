@@ -4,6 +4,7 @@ const Abono = require('./Abonos');
 
 const honorarioSchema = new mongoose.Schema({
   clienteRut: { type: String, ref: 'Cliente', required: true },  
+  descripcion: { type: String, required: true },
   fechaEmision: { type: Date, required: true },
   fechaPago: { type: Date },
   estado: { type: String, enum: ['pendiente', 'pagada', 'abonada'], default: 'pendiente' },
