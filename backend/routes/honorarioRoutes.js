@@ -547,12 +547,24 @@ router.put('/pagar-masivo', verifyToken, checkRole(['ADMIN', 'FACTURACION']), as
   }
 
   try {
+    // Verificar que todos los honorarios existen y tienen un cliente válido
+    const honorarios = await Honorario.find({ _id: { $in: honorarioIds } });
+    if (honorarios.length !== honorarioIds.length) {
+      return res.status(400).json({ error: 'Algunos honorarios no fueron encontrados.' });
+    }
+
+    // Verificar que todos los clientes existen
+    const clienteRuts = honorarios.map(honorario => honorario.clienteRut);
+    const clientes = await Cliente.find({ rut: { $in: clienteRuts } });
+    if (clientes.length !== clienteRuts.length) {
+      return res.status(400).json({ error: 'Cliente no encontrado para algunos honorarios.' });
+    }
+
+    // Actualizar los honorarios a estado 'pagada'
     const result = await Honorario.updateMany(
       { _id: { $in: honorarioIds }, estado: { $ne: 'pagada' } },
       { $set: { estado: 'pagada', fechaPago: new Date() } }
     );
-
-    console.log(`${result.nModified} honorario(s) actualizado(s) a pagada.`);
 
     res.json({
       message: `${result.nModified} honorario(s) actualizado(s) a pagada.`,
