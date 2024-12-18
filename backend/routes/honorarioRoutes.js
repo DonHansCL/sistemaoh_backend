@@ -532,9 +532,18 @@ router.put('/:id', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req,
 router.put('/pagar-masivo', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
   const { honorarioIds } = req.body;
 
+  // Agregar logging para verificar el contenido de req.body
+  console.log('Received pagar-masivo request with honorarioIds:', honorarioIds);
+
   if (!Array.isArray(honorarioIds) || honorarioIds.length === 0) {
     return res.status(400).json({ error: 'No se proporcionaron IDs de honorarios.' });
   }
+
+   // Validar que todos los IDs sean válidos ObjectId
+   const esValido = honorarioIds.every(id => mongoose.Types.ObjectId.isValid(id));
+   if (!esValido) {
+     return res.status(400).json({ error: 'Algunos IDs de honorarios son inválidos.' });
+   }
 
   try {
     const result = await Honorario.updateMany(
