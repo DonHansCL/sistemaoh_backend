@@ -42,7 +42,7 @@ function esFechaValida(fechaString) {
 
 // Crear un nuevo honorario
 router.post('/', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
-  const { clienteRut, fechaEmision, fechaPago, estado, monto } = req.body;
+  const { clienteRut, descripcion, fechaEmision, fechaPago, estado, monto } = req.body;
 
   try {
     const clienteExistente = await Cliente.findOne({ rut: clienteRut });
@@ -52,6 +52,7 @@ router.post('/', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, r
 
     const nuevoHonorario = new Honorario({
       clienteRut: clienteExistente.rut, // Asignar rut directamente
+      descripcion,
       fechaEmision,
       fechaPago,
       estado,
@@ -442,7 +443,7 @@ router.get('/', verifyToken, checkRole(['ADMIN', 'USER', 'FACTURACION']), async 
 // Actualizar un honorario existente por ID
 router.put('/:id', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
   const { id } = req.params;
-  const { clienteRut, fechaEmision, fechaPago, estado, monto } = req.body;
+  const { clienteRut, descripcion, fechaEmision, fechaPago, estado, monto } = req.body;
 
   try {
     // 1. Verificar si el cliente con el RUT dado existe
@@ -460,6 +461,7 @@ router.put('/:id', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req,
     // 3. Preparar los campos a actualizar
     const camposActualizacion = {
       clienteRut: clienteExistente.rut,
+      descripcion,
       fechaEmision,
       fechaPago,
       estado,
