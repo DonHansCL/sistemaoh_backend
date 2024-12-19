@@ -244,16 +244,16 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
                     as: 'abonosFacturasData'
                 }
             },
-            // Lookup Abonos para Honorarios
+            // Lookup Abonos para Honorarios - CORREGIDO
             {
                 $lookup: {
-                    from: 'abonoHonorarios',
-                    let: { honorario_ids: '$honorarios._id' },
+                    from: 'abonohonorarios', // CORRECCIÓN: Asegúrate de que este sea el nombre correcto
+                    let: { honorarios_ids: '$honorarios._id' },
                     pipeline: [
                         { 
                             $match: { 
                                 $expr: { 
-                                    $in: ['$honorario_id', '$$honorario_ids'] 
+                                    $in: ['$honorario_id', '$$honorarios_ids'] 
                                 } 
                             } 
                         },
@@ -410,6 +410,9 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
             }
         ];
 
+        // Debugging: Log the pipeline stages
+        // console.log(JSON.stringify(pipeline, null, 2));
+
         const result = await Cliente.aggregate(pipeline);
 
         if (result.length === 0) {
@@ -435,7 +438,6 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
         res.status(500).json({ message: 'Error al obtener clientes paginados' });
     }
 });
-
 
 
 // Actualizar un cliente
