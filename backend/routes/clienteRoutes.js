@@ -169,184 +169,202 @@ router.get('/', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, re
   // Nueva Ruta: Obtener clientes paginados
 // URL: /paginated?page=1&limit=25
 router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
-  let { page = 1, limit = 25, searchTerm = '', sortField = 'nombre', sortOrder = 'asc' } = req.query;
+    let { page = 1, limit = 25, searchTerm = '', sortField = 'nombre', sortOrder = 'asc' } = req.query;
 
-  // Convertir a número
-  page = parseInt(page, 10);
-  limit = parseInt(limit, 10);
+    // Convertir a número
+    page = parseInt(page, 10);
+    limit = parseInt(limit, 10);
 
-  if (isNaN(page) || page < 1) page = 1;
-  if (isNaN(limit) || limit < 1) limit = 25;
+    if (isNaN(page) || page < 1) page = 1;
+    if (isNaN(limit) || limit < 1) limit = 25;
 
-  // Crear filtro de búsqueda
-  const searchRegex = new RegExp(searchTerm, 'i'); // Búsqueda insensible a mayúsculas y minúsculas
-  const matchStage = searchTerm
-  ? { 
-      $match: {
-          $or: [
-              { nombre: { $regex: searchRegex } },
-              { rut: { $regex: searchRegex } }
-          ]
-      }
-    }
-  : { $match: {} };
-
- // Crear objeto de sort
- const sortOptions = {};
- const allowedSortFields = ['nombre', 'rut', 'direccion', 'email', 'saldoPendiente']; // Define campos permitidos para ordenar
- if (allowedSortFields.includes(sortField)) {
-     sortOptions[sortField] = sortOrder === 'asc' ? 1 : -1;
- } else {
-     sortOptions['nombre'] = 1; // Orden predeterminado
- }
-
- try {
-     // Pipeline de agregación
-     const pipeline = [
-         matchStage,
-         {
-             $lookup: {
-                 from: 'facturas', // Nombre de la colección en minúsculas y plural
-                 localField: 'rut',
-                 foreignField: 'clienteRut',
-                 as: 'facturas'
-             }
-         },
-         {
-          $lookup: {
-              from: 'honorarios',
-              localField: 'rut',
-              foreignField: 'clienteRut',
-              as: 'honorarios'
+    // Crear filtro de búsqueda
+    const searchRegex = new RegExp(searchTerm, 'i'); // Búsqueda insensible a mayúsculas y minúsculas
+    const matchStage = searchTerm
+        ? { 
+            $match: {
+                $or: [
+                    { nombre: { $regex: searchRegex } },
+                    { rut: { $regex: searchRegex } }
+                ]
+            }
           }
-      },
-      {
-        $addFields: {
-            // Resumen Facturas
-            saldoPendienteFacturas: {
-                $sum: {
-                    $map: {
-                        input: {
+        : { $match: {} };
+
+    // Crear objeto de sort
+    const sortOptions = {};
+    const allowedSortFields = ['nombre', 'rut', 'direccion', 'email', 'saldoPendienteTotal', 'abonosTotales']; // Añadido 'saldoPendienteTotal' y 'abonosTotales'
+    if (allowedSortFields.includes(sortField)) {
+        sortOptions[sortField] = sortOrder === 'asc' ? 1 : -1;
+    } else {
+        sortOptions['nombre'] = 1; // Orden predeterminado
+    }
+
+    try {
+        // Pipeline de agregación
+        const pipeline = [
+            matchStage,
+            {
+                $lookup: {
+                    from: 'facturas',
+                    localField: 'rut',
+                    foreignField: 'clienteRut',
+                    as: 'facturas'
+                }
+            },
+            {
+                $lookup: {
+                    from: 'honorarios',
+                    localField: 'rut',
+                    foreignField: 'clienteRut',
+                    as: 'honorarios'
+                }
+            },
+            {
+                $addFields: {
+                    // Resumen Facturas
+                    saldoPendienteFacturas: {
+                        $sum: {
+                            $map: {
+                                input: {
+                                    $filter: {
+                                        input: '$facturas',
+                                        as: 'factura',
+                                        cond: { $in: ['$$factura.estado', ['pendiente', 'abonada']] }
+                                    }
+                                },
+                                as: 'factura',
+                                in: { $ifNull: ['$$factura.monto', 0] }
+                            }
+                        }
+                    },
+                    abonosFacturas: {
+                        $sum: {
+                            $map: {
+                                input: '$facturas',
+                                as: 'factura',
+                                in: { $ifNull: ['$$factura.abonos', 0] } // Asumiendo que 'abonos' es un array de montos
+                            }
+                        }
+                    },
+                    cantidadDocumentosPendientesFacturas: {
+                        $size: {
                             $filter: {
                                 input: '$facturas',
                                 as: 'factura',
                                 cond: { $in: ['$$factura.estado', ['pendiente', 'abonada']] }
                             }
-                        },
-                        as: 'factura',
-                        in: '$$factura.monto'
-                    }
-                }
-            },
-            abonosFacturas: {
-                $sum: '$facturas.abono.monto' // Asumiendo que cada factura tiene un campo abono con monto
-            },
-            cantidadDocumentosPendientesFacturas: {
-                $size: {
-                    $filter: {
-                        input: '$facturas',
-                        as: 'factura',
-                        cond: { $in: ['$$factura.estado', ['pendiente', 'abonada']] }
-                    }
-                }
-            },
-            // Resumen Honorarios
-            saldoPendienteHonorarios: {
-                $sum: {
-                    $map: {
-                        input: {
+                        }
+                    },
+                    // Resumen Honorarios
+                    saldoPendienteHonorarios: {
+                        $sum: {
+                            $map: {
+                                input: {
+                                    $filter: {
+                                        input: '$honorarios',
+                                        as: 'honorario',
+                                        cond: { $in: ['$$honorario.estado', ['pendiente', 'abonada']] }
+                                    }
+                                },
+                                as: 'honorario',
+                                in: { $ifNull: ['$$honorario.monto', 0] }
+                            }
+                        }
+                    },
+                    abonosHonorarios: {
+                        $sum: {
+                            $map: {
+                                input: '$honorarios',
+                                as: 'honorario',
+                                in: { $ifNull: ['$$honorario.abonos', 0] } // Asumiendo que 'abonos' es un array de montos
+                            }
+                        }
+                    },
+                    cantidadDocumentosPendientesHonorarios: {
+                        $size: {
                             $filter: {
                                 input: '$honorarios',
                                 as: 'honorario',
                                 cond: { $in: ['$$honorario.estado', ['pendiente', 'abonada']] }
                             }
-                        },
-                        as: 'honorario',
-                        in: '$$honorario.monto'
+                        }
+                    },
+                    // Totales
+                    saldoPendienteTotal: { 
+                        $add: [
+                            { $ifNull: ['$saldoPendienteFacturas', 0] }, 
+                            { $ifNull: ['$saldoPendienteHonorarios', 0] }
+                        ]
+                    },
+                    abonosTotales: { 
+                        $add: [
+                            { $ifNull: ['$abonosFacturas', 0] }, 
+                            { $ifNull: ['$abonosHonorarios', 0] }
+                        ]
+                    },
+                    cantidadDocumentosPendientesTotal: { 
+                        $add: [
+                            { $ifNull: ['$cantidadDocumentosPendientesFacturas', 0] }, 
+                            { $ifNull: ['$cantidadDocumentosPendientesHonorarios', 0] }
+                        ]
                     }
                 }
             },
-            abonosHonorarios: {
-                $sum: '$honorarios.abono.monto' // Asumiendo que cada honorario tiene un campo abono con monto
-            },
-            cantidadDocumentosPendientesHonorarios: {
-                $size: {
-                    $filter: {
-                        input: '$honorarios',
-                        as: 'honorario',
-                        cond: { $in: ['$$honorario.estado', ['pendiente', 'abonada']] }
-                    }
+            {
+                $project: {
+                    facturas: 0,
+                    honorarios: 0,
+                    // Puedes excluir otros campos si no son necesarios
                 }
             },
-            // Saldo Pendiente Total
-            saldoPendienteTotal: { 
-                $add: ['$saldoPendienteFacturas', '$saldoPendienteHonorarios']
+            {
+                $sort: sortOptions
             },
-            // Abonos Totales
-            abonosTotales: { 
-                $add: ['$abonosFacturas', '$abonosHonorarios']
+            {
+                $facet: {
+                    metadata: [{ $count: "total" }, { $addFields: { page } }],
+                    data: [{ $skip: (page - 1) * limit }, { $limit: limit }]
+                }
             },
-            // Cantidad de Documentos Pendientes Totales
-            cantidadDocumentosPendientesTotal: { 
-                $add: ['$cantidadDocumentosPendientesFacturas', '$cantidadDocumentosPendientesHonorarios']
+            {
+                $unwind: "$metadata"
+            },
+            {
+                $project: {
+                    data: 1,
+                    total: "$metadata.total",
+                    page: "$metadata.page",
+                    limit: limit
+                }
             }
+        ];
+
+        const result = await Cliente.aggregate(pipeline);
+
+        if (result.length === 0) {
+            return res.json({
+                data: [],
+                total: 0,
+                page,
+                limit,
+            });
         }
-    },
-    {
-        $project: {
-            facturas: 0,
-            honorarios: 0,
-            // Puedes excluir otros campos si no son necesarios
-        }
-    },
-    {
-        $sort: sortOptions
-    },
-    {
-        $facet: {
-            metadata: [{ $count: "total" }, { $addFields: { page } }],
-            data: [{ $skip: (page - 1) * limit }, { $limit: limit }]
-        }
-    },
-    {
-        $unwind: "$metadata"
-    },
-    {
-        $project: {
-            data: 1,
-            total: "$metadata.total",
-            page: "$metadata.page",
-            limit: limit
-        }
+
+        const { data, total, page: currentPage, limit: currentLimit } = result[0];
+
+        res.json({
+            data,
+            total,
+            page: currentPage,
+            limit: currentLimit,
+        });
+
+    } catch (error) {
+        console.error('Error al obtener clientes paginados:', error);
+        res.status(500).json({ message: 'Error al obtener clientes paginados' });
     }
-];
-
-const result = await Cliente.aggregate(pipeline);
-
-if (result.length === 0) {
-    return res.json({
-        data: [],
-        total: 0,
-        page,
-        limit,
-    });
-}
-
-const { data, total, page: currentPage, limit: currentLimit } = result[0];
-
-res.json({
-    data,
-    total,
-    page: currentPage,
-    limit: currentLimit,
 });
-
-} catch (error) {
-console.error('Error al obtener clientes paginados:', error);
-res.status(500).json({ message: 'Error al obtener clientes paginados' });
-}
-});
-
 
 
 // Actualizar un cliente
