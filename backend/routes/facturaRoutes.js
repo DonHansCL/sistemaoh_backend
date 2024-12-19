@@ -483,6 +483,30 @@ if (year && month) {
 })
 
 
+// Ruta para pagar masivamente facturas
+router.put('/pagar-masivo', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
+  const { facturaIds } = req.body;
+
+  if (!Array.isArray(facturaIds) || facturaIds.length === 0) {
+    return res.status(400).json({ error: 'No se proporcionaron IDs de facturas.' });
+  }
+
+  try {
+    const result = await Factura.updateMany(
+      { _id: { $in: facturaIds }, estado: { $ne: 'pagada' } },
+      { $set: { estado: 'pagada', fechaPago: new Date() } }
+    );
+
+    res.json({
+      message: `${result.nModified} factura(s) actualizada(s) a pagada.`,
+    });
+  } catch (error) {
+    console.error('Error al pagar masivamente facturas:', error);
+    res.status(500).json({ error: 'Error al pagar masivamente facturas.' });
+  }
+});
+
+
 
 
 // Actualizar una factura existente por ID
@@ -570,28 +594,6 @@ router.put('/:id', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req,
 
 
 
-// Ruta para pagar masivamente facturas
-router.put('/pagar-masivo', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
-  const { facturaIds } = req.body;
-
-  if (!Array.isArray(facturaIds) || facturaIds.length === 0) {
-    return res.status(400).json({ error: 'No se proporcionaron IDs de facturas.' });
-  }
-
-  try {
-    const result = await Factura.updateMany(
-      { _id: { $in: facturaIds }, estado: { $ne: 'pagada' } },
-      { $set: { estado: 'pagada', fechaPago: new Date() } }
-    );
-
-    res.json({
-      message: `${result.nModified} factura(s) actualizada(s) a pagada.`,
-    });
-  } catch (error) {
-    console.error('Error al pagar masivamente facturas:', error);
-    res.status(500).json({ error: 'Error al pagar masivamente facturas.' });
-  }
-});
 
 
 
