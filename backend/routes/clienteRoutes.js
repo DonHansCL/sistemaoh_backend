@@ -362,7 +362,7 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
 
     } catch (error) {
         console.error('Error al obtener clientes paginados:', error);
-        res.status(500).json({ message: 'Error al obtener clientes paginados' });
+        res.status(500).json({ message: 'Error al obtener clientes paginados', error: error.message });
     }
 });
 
