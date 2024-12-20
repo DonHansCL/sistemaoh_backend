@@ -206,7 +206,7 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
             // Lookup Facturas
             {
                 $lookup: {
-                    from: 'facturas', // Nombre correcto de la colección
+                    from: 'facturas',
                     localField: 'rut',
                     foreignField: 'clienteRut',
                     as: 'facturas'
@@ -215,7 +215,7 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
             // Lookup Honorarios
             {
                 $lookup: {
-                    from: 'honorarios', // Nombre correcto de la colección
+                    from: 'honorarios',
                     localField: 'rut',
                     foreignField: 'clienteRut',
                     as: 'honorarios'
@@ -233,7 +233,7 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
             // Lookup Abonos para Honorarios
             {
                 $lookup: {
-                    from: 'abonohonorarios', // Nombre corregido de la colección
+                    from: 'abonoHonorarios',
                     localField: 'honorarios._id',
                     foreignField: 'honorario_id',
                     as: 'abonosHonorarios'
@@ -303,6 +303,12 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
                         $add: [ 
                             { $ifNull: ['$totalAbonosFacturas', 0] }, 
                             { $ifNull: ['$totalAbonosHonorarios', 0] } 
+                        ] 
+                    },
+                    cantidadDocumentosPendientesTotal: { 
+                        $add: [ 
+                            { $ifNull: ['$cantidadDocumentosPendientesFacturas', 0] }, 
+                            { $ifNull: ['$cantidadDocumentosPendientesHonorarios', 0] } 
                         ] 
                     }
                 }
