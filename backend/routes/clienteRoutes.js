@@ -171,7 +171,7 @@ router.get('/', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, re
 router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
     let { page = 1, limit = 25, searchTerm = '', sortField = 'nombre', sortOrder = 'asc' } = req.query;
 
-    // Convertir y validar parámetros de paginación
+    // Convertir a número y validar
     page = parseInt(page, 10);
     limit = parseInt(limit, 10);
     if (isNaN(page) || page < 1) page = 1;
@@ -190,7 +190,7 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
         }
         : { $match: {} };
 
-    // Crear opciones de ordenación
+    // Crear objeto de ordenación
     const allowedSortFields = ['nombre', 'rut', 'direccion', 'email', 'saldoPendienteTotal'];
     const sortOptions = allowedSortFields.includes(sortField)
         ? { [sortField]: sortOrder === 'asc' ? 1 : -1 }
@@ -217,7 +217,7 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
                     as: 'honorarios'
                 }
             },
-            // Agregar campos con cálculos
+            // Agregar los campos necesarios con conversión a números
             {
                 $addFields: {
                     // Saldo Pendiente Facturas
@@ -231,8 +231,8 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
                                         { $eq: ['$$factura.estado', 'pendiente'] },
                                         {
                                             $subtract: [
-                                                { $ifNull: [{ $toDouble: '$$factura.monto' }, 0] },
-                                                { $ifNull: [{ $toDouble: '$$factura.total_abonado' }, 0] }
+                                                { $toDouble: { $ifNull: ['$$factura.monto', 0] } },
+                                                { $toDouble: { $ifNull: ['$$factura.total_abonado', 0] } }
                                             ]
                                         },
                                         0
@@ -262,8 +262,8 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
                                         { $eq: ['$$honorario.estado', 'pendiente'] },
                                         {
                                             $subtract: [
-                                                { $ifNull: [{ $toDouble: '$$honorario.monto' }, 0] },
-                                                { $ifNull: [{ $toDouble: '$$honorario.total_abonado' }, 0] }
+                                                { $toDouble: { $ifNull: ['$$honorario.monto', 0] } },
+                                                { $toDouble: { $ifNull: ['$$honorario.total_abonado', 0] } }
                                             ]
                                         },
                                         0
@@ -291,7 +291,7 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
                     }
                 }
             },
-            // Excluir campos innecesarios
+            // Proyección de campos
             {
                 $project: {
                     facturas: 0,
