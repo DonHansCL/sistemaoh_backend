@@ -191,10 +191,13 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
         : { $match: {} };
 
     // Crear objeto de ordenación
-    const allowedSortFields = ['nombre', 'rut', 'direccion', 'email', 'saldoPendienteTotal'];
-    const sortOptions = allowedSortFields.includes(sortField)
-        ? { [sortField]: sortOrder === 'asc' ? 1 : -1 }
-        : { nombre: 1 };
+    const sortOptions = {};
+    const allowedSortFields = ['nombre', 'rut', 'direccion', 'email', 'saldoPendienteTotal', 'abonosTotales'];
+    if (allowedSortFields.includes(sortField)) {
+        sortOptions[sortField] = sortOrder === 'asc' ? 1 : -1;
+    } else {
+        sortOptions['nombre'] = 1;
+    }
 
     try {
         const pipeline = [
@@ -208,107 +211,118 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
                     as: 'facturas'
                 }
             },
-            // Lookup Honorarios
-            {
-                $lookup: {
-                    from: 'honorarios',
-                    localField: 'rut',
-                    foreignField: 'clienteRut',
-                    as: 'honorarios'
-                }
-            },
-            // Agregar los campos necesarios
-            {
-                $addFields: {
-                    // Saldo Pendiente Facturas
-                    saldoPendienteFacturas: {
-                        $sum: {
-                            $map: {
-                                input: '$facturas',
-                                as: 'factura',
-                                in: {
-                                    $cond: {
-                                        if: { $eq: ['$$factura.estado', 'pendiente'] },
-                                        then: { $subtract: ['$$factura.monto', { $ifNull: ['$$factura.total_abonado', 0] }] },
-                                        else: 0
-                                    }
+             // Lookup Honorarios
+        {
+            $lookup: {
+                from: 'honorarios',
+                localField: 'rut',
+                foreignField: 'clienteRut',
+                as: 'honorarios'
+            }
+        },
+        // Agregar los campos necesarios
+        {
+            $addFields: {
+                // Saldo Pendiente Facturas
+                saldoPendienteFacturas: {
+                    $sum: {
+                        $map: {
+                            input: '$facturas',
+                            as: 'factura',
+                            in: {
+                                $cond: {
+                                    if: { $eq: ['$$factura.estado', 'pendiente'] },
+                                    then: {
+                                        $subtract: [
+                                            { $ifNull: ['$$factura.monto', 0] },
+                                            { $ifNull: ['$$factura.total_abonado', 0] }
+                                        ]
+                                    },
+                                    else: 0
                                 }
                             }
                         }
-                    },
-                    // Cantidad de Facturas Pendientes
-                    cantidadFacturasPendientes: {
-                        $size: {
-                            $filter: {
-                                input: '$facturas',
-                                as: 'factura',
-                                cond: { $eq: ['$$factura.estado', 'pendiente'] }
-                            }
-                        }
-                    },
-                    // Saldo Pendiente Honorarios
-                    saldoPendienteHonorarios: {
-                        $sum: {
-                            $map: {
-                                input: '$honorarios',
-                                as: 'honorario',
-                                in: {
-                                    $cond: {
-                                        if: { $eq: ['$$honorario.estado', 'pendiente'] },
-                                        then: { $subtract: ['$$honorario.monto', { $ifNull: ['$$honorario.total_abonado', 0] }] },
-                                        else: 0
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    // Cantidad de Honorarios Pendientes
-                    cantidadHonorariosPendientes: {
-                        $size: {
-                            $filter: {
-                                input: '$honorarios',
-                                as: 'honorario',
-                                cond: { $eq: ['$$honorario.estado', 'pendiente'] }
-                            }
-                        }
-                    },
-                    // Saldo Pendiente Total
-                    saldoPendienteTotal: {
-                        $add: [
-                            { $ifNull: ['$saldoPendienteFacturas', 0] },
-                            { $ifNull: ['$saldoPendienteHonorarios', 0] }
-                        ]
                     }
+                },
+                // Cantidad de Facturas Pendientes
+                cantidadFacturasPendientes: {
+                    $size: {
+                        $filter: {
+                            input: '$facturas',
+                            as: 'factura',
+                            cond: { $eq: ['$$factura.estado', 'pendiente'] }
+                        }
+                    }
+                },
+                // Saldo Pendiente Honorarios
+                saldoPendienteHonorarios: {
+                    $sum: {
+                        $map: {
+                            input: '$honorarios',
+                            as: 'honorario',
+                            in: {
+                                $cond: {
+                                    if: { $eq: ['$$honorario.estado', 'pendiente'] },
+                                    then: {
+                                        $subtract: [
+                                            { $ifNull: ['$$honorario.monto', 0] },
+                                            { $ifNull: ['$$honorario.total_abonado', 0] }
+                                        ]
+                                    },
+                                    else: 0
+                                }
+                            }
+                        }
+                    }
+                },
+                // Cantidad de Honorarios Pendientes
+                cantidadHonorariosPendientes: {
+                    $size: {
+                        $filter: {
+                            input: '$honorarios',
+                            as: 'honorario',
+                            cond: { $eq: ['$$honorario.estado', 'pendiente'] }
+                        }
+                    }
+                },
+                // Saldo Pendiente Total
+                saldoPendienteTotal: {
+                    $add: [
+                        { $ifNull: ['$saldoPendienteFacturas', 0] },
+                        { $ifNull: ['$saldoPendienteHonorarios', 0] }
+                    ]
                 }
-            },
-            // Proyectar campos no necesarios
-            {
-                $project: {
-                    facturas: 0,
-                    honorarios: 0
-                }
-            },
-            // Ordenar y paginar
-            { $sort: sortOptions },
-            { $skip: (page - 1) * limit },
-            { $limit: limit }
-        ];
+            }
+        },
+        // Proyección de campos
+        {
+            $project: {
+                facturas: 0,
+                honorarios: 0
+            }
+        },
+        // Ordenar y paginar
+        { $sort: sortOptions },
+        { $skip: (page - 1) * limit },
+        { $limit: limit }
+    ];
 
-        const data = await Cliente.aggregate(pipeline);
-        const total = await Cliente.countDocuments(matchStage.$match);
+    const data = await Cliente.aggregate(pipeline);
+    const total = await Cliente.countDocuments(matchStage.$match);
 
-        res.json({
-            data,
-            total,
-            page,
-            limit,
-        });
+    res.json({
+        data,
+        total,
+        page,
+        limit,
+    });
 
-    } catch (error) {
-        console.error('Error al obtener clientes paginados:', error);
-        res.status(500).json({ message: 'Error al obtener clientes paginados', error: error.message });
-    }
+} catch (error) {
+    console.error('Error al obtener clientes paginados:', error);
+    res.status(500).json({ message: 'Error al obtener clientes paginados', error: error.message });
+}
 });
+
 
 
 // Actualizar un cliente
