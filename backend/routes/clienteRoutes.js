@@ -171,10 +171,9 @@ router.get('/', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, re
 router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
     let { page = 1, limit = 25, searchTerm = '', sortField = 'nombre', sortOrder = 'asc' } = req.query;
 
-    // Convertir a número
+    // Convertir a número y validar
     page = parseInt(page, 10);
     limit = parseInt(limit, 10);
-
     if (isNaN(page) || page < 1) page = 1;
     if (isNaN(limit) || limit < 1) limit = 25;
 
@@ -191,9 +190,9 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
         }
         : { $match: {} };
 
-    // Crear objeto de sort
+    // Crear objeto de ordenación
     const sortOptions = {};
-    const allowedSortFields = ['nombre', 'rut', 'direccion', 'email'];
+    const allowedSortFields = ['nombre', 'rut', 'direccion', 'email', 'saldoPendienteTotal', 'abonosTotales'];
     if (allowedSortFields.includes(sortField)) {
         sortOptions[sortField] = sortOrder === 'asc' ? 1 : -1;
     } else {
@@ -254,7 +253,7 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
             // Agregar los campos necesarios
             {
                 $addFields: {
-                    // Saldo Pendiente Facturas (sin modificar)
+                    // Cálculos existentes (no modificar)
                     saldoPendienteFacturas: {
                         $sum: {
                             $map: {
@@ -265,14 +264,18 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
                                         if: {
                                             $in: ['$$factura.estado', ['pendiente', 'abonada']]
                                         },
-                                        then: { $subtract: ['$$factura.monto', { $ifNull: ['$$factura.total_abonado', 0] }] },
+                                        then: {
+                                            $subtract: [
+                                                '$$factura.monto',
+                                                { $ifNull: ['$$factura.total_abonado', 0] }
+                                            ]
+                                        },
                                         else: 0
                                     }
                                 }
                             }
                         }
                     },
-                    // Saldo Pendiente Honorarios (sin modificar)
                     saldoPendienteHonorarios: {
                         $sum: {
                             $map: {
@@ -283,29 +286,27 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
                                         if: {
                                             $in: ['$$honorario.estado', ['pendiente', 'abonada']]
                                         },
-                                        then: { $subtract: ['$$honorario.monto', { $ifNull: ['$$honorario.total_abonado', 0] }] },
+                                        then: {
+                                            $subtract: [
+                                                '$$honorario.monto',
+                                                { $ifNull: ['$$honorario.total_abonado', 0] }
+                                            ]
+                                        },
                                         else: 0
                                     }
                                 }
                             }
                         }
                     },
-                    // Suma de Abonos Facturas
-                    abonosFacturas: {
-                        $sum: '$abonosFacturas.monto'
-                    },
-                    // Suma de Abonos Honorarios
-                    abonosHonorarios: {
-                        $sum: '$abonosHonorarios.monto'
-                    },
-                    // Total Abonos
+                    // Nuevos cálculos
+                    abonosFacturas: { $ifNull: [{ $sum: '$abonosFacturas.monto' }, 0] },
+                    abonosHonorarios: { $ifNull: [{ $sum: '$abonosHonorarios.monto' }, 0] },
                     abonosTotales: {
                         $add: [
-                            { $ifNull: ['$abonosFacturas', 0] },
-                            { $ifNull: ['$abonosHonorarios', 0] }
+                            { $ifNull: [{ $sum: '$abonosFacturas.monto' }, 0] },
+                            { $ifNull: [{ $sum: '$abonosHonorarios.monto' }, 0] }
                         ]
                     },
-                    // Total Saldo Pendiente
                     saldoPendienteTotal: {
                         $add: [
                             { $ifNull: ['$saldoPendienteFacturas', 0] },
@@ -314,7 +315,7 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
                     }
                 }
             },
-            // Proyectar campos que no necesitamos
+            // Proyección de campos
             {
                 $project: {
                     facturas: 0,
@@ -323,17 +324,10 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
                     abonosHonorarios: 0
                 }
             },
-            // Ordenar
-            {
-                $sort: sortOptions
-            },
-            // Paginación
-            {
-                $skip: (page - 1) * limit
-            },
-            {
-                $limit: limit
-            }
+            // Ordenar y paginar
+            { $sort: sortOptions },
+            { $skip: (page - 1) * limit },
+            { $limit: limit }
         ];
 
         const data = await Cliente.aggregate(pipeline);
@@ -348,10 +342,9 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
 
     } catch (error) {
         console.error('Error al obtener clientes paginados:', error);
-        res.status(500).json({ message: 'Error al obtener clientes paginados' });
+        res.status(500).json({ message: 'Error al obtener clientes paginados', error: error.message });
     }
 });
-
 
 
 
