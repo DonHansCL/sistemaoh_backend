@@ -193,7 +193,7 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
 
     // Crear objeto de sort
     const sortOptions = {};
-    const allowedSortFields = ['nombre', 'rut', 'direccion', 'email', 'saldoPendienteTotal', 'abonosTotales']; // Añadido 'saldoPendienteTotal' y 'abonosTotales'
+    const allowedSortFields = ['nombre', 'rut', 'direccion', 'email', 'saldoPendienteTotal', 'abonosTotales'];
     if (allowedSortFields.includes(sortField)) {
         sortOptions[sortField] = sortOrder === 'asc' ? 1 : -1;
     } else {
@@ -201,7 +201,6 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
     }
 
     try {
-        // Pipeline de agregación
         const pipeline = [
             matchStage,
             // Lookup Facturas
@@ -243,66 +242,40 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
             // Agregar los campos necesarios
             {
                 $addFields: {
-                    // Resumen Facturas
-                    saldoPendienteFacturas: {
-                        $sum: {
-                            $map: {
-                                input: {
-                                    $filter: {
-                                        input: '$facturas',
-                                        as: 'factura',
-                                        cond: { $in: ['$$factura.estado', ['pendiente', 'abonada']] }
-                                    }
-                                },
-                                as: 'factura',
-                                in: { $ifNull: ['$$factura.monto', 0] }
-                            }
-                        }
+                    // Resumen Facturas (No modificar)
+                    totalFacturas: { 
+                        $sum: '$facturas.monto' 
                     },
+                    saldoPendienteFacturas: { 
+                        $subtract: [ 
+                            { $ifNull: ['$totalFacturas', 0] }, 
+                            { $ifNull: ['$totalAbonosFacturas', 0] } 
+                        ] 
+                    },
+                    
+                    // Resumen Honorarios (No modificar)
+                    totalHonorarios: { 
+                        $sum: '$honorarios.monto' 
+                    },
+                    saldoPendienteHonorarios: { 
+                        $subtract: [ 
+                            { $ifNull: ['$totalHonorarios', 0] }, 
+                            { $ifNull: ['$totalAbonosHonorarios', 0] } 
+                        ] 
+                    },
+
+                    // **Nuevos Cálculos**
+                    
                     // Suma de Abonos Facturas
                     abonosFacturas: { 
                         $sum: '$abonosFacturas.monto' 
                     },
-                    cantidadDocumentosPendientesFacturas: {
-                        $size: {
-                            $filter: {
-                                input: '$facturas',
-                                as: 'factura',
-                                cond: { $in: ['$$factura.estado', ['pendiente', 'abonada']] }
-                            }
-                        }
+                    // Suma de Abonos Honorarios
+                    abonosHonorarios: { 
+                        $sum: '$abonosHonorarios.monto' 
                     },
-                    // Resumen Honorarios
-                    saldoPendienteHonorarios: {
-                        $sum: {
-                            $map: {
-                                input: {
-                                    $filter: {
-                                        input: '$honorarios',
-                                        as: 'honorario',
-                                        cond: { $in: ['$$honorario.estado', ['pendiente', 'abonada']] }
-                                    }
-                                },
-                                as: 'honorario',
-                                in: { $ifNull: ['$$honorario.monto', 0] }
-                            }
-                        }
-                    },
-                   // Suma de Abonos Honorarios
-                   abonosHonorarios: { 
-                    $sum: '$abonosHonorarios.monto' 
-                },
-                    cantidadDocumentosPendientesHonorarios: {
-                        $size: {
-                            $filter: {
-                                input: '$honorarios',
-                                as: 'honorario',
-                                cond: { $in: ['$$honorario.estado', ['pendiente', 'abonada']] }
-                            }
-                        }
-                    },
-                     // Total Abonos
-                     abonosTotales: { 
+                    // Total Abonos
+                    abonosTotales: { 
                         $add: [ 
                             { $ifNull: ['$abonosFacturas', 0] }, 
                             { $ifNull: ['$abonosHonorarios', 0] } 
@@ -314,15 +287,10 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
                             { $ifNull: ['$saldoPendienteFacturas', 0] }, 
                             { $ifNull: ['$saldoPendienteHonorarios', 0] } 
                         ] 
-                    },
-                    cantidadDocumentosPendientesTotal: { 
-                        $add: [
-                            { $ifNull: ['$cantidadDocumentosPendientesFacturas', 0] }, 
-                            { $ifNull: ['$cantidadDocumentosPendientesHonorarios', 0] }
-                        ]
                     }
                 }
             },
+            // Proyectar campos que no necesitamos
             {
                 $project: {
                     facturas: 0,
@@ -331,28 +299,35 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
                     abonosHonorarios: 0,
                     totalFacturas: 0,
                     totalHonorarios: 0
-                    // Puedes excluir otros campos si no son necesarios
                 }
             },
-            {
-                $sort: sortOptions
+            // Ordenar
+            { 
+                $sort: sortOptions 
             },
-            {
+            // Paginación
+            { 
                 $facet: {
-                    metadata: [{ $count: "total" }, { $addFields: { page } }],
-                    data: [{ $skip: (page - 1) * limit }, { $limit: limit }]
-                }
+                    metadata: [ 
+                        { $count: "total" }, 
+                        { $addFields: { page } } 
+                    ],
+                    data: [ 
+                        { $skip: (page - 1) * limit }, 
+                        { $limit: limit } 
+                    ]
+                } 
             },
-            {
-                $unwind: "$metadata"
+            { 
+                $unwind: "$metadata" 
             },
-            {
+            { 
                 $project: {
                     data: 1,
                     total: "$metadata.total",
                     page: "$metadata.page",
                     limit: limit
-                }
+                } 
             }
         ];
 
