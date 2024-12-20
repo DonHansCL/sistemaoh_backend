@@ -204,6 +204,7 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
         // Pipeline de agregación
         const pipeline = [
             matchStage,
+            // Lookup Facturas
             {
                 $lookup: {
                     from: 'facturas',
@@ -212,6 +213,7 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
                     as: 'facturas'
                 }
             },
+            // Lookup Honorarios
             {
                 $lookup: {
                     from: 'honorarios',
@@ -220,6 +222,25 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
                     as: 'honorarios'
                 }
             },
+            // Lookup Abonos para Facturas
+            {
+                $lookup: {
+                    from: 'abonos',
+                    localField: 'facturas._id',
+                    foreignField: 'factura_id',
+                    as: 'abonosFacturas'
+                }
+            },
+            // Lookup Abonos para Honorarios
+            {
+                $lookup: {
+                    from: 'abonohonorarios',
+                    localField: 'honorarios._id',
+                    foreignField: 'honorario_id',
+                    as: 'abonosHonorarios'
+                }
+            },
+            // Agregar los campos necesarios
             {
                 $addFields: {
                     // Resumen Facturas
@@ -238,14 +259,9 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
                             }
                         }
                     },
-                    abonosFacturas: {
-                        $sum: {
-                            $map: {
-                                input: '$facturas',
-                                as: 'factura',
-                                in: { $ifNull: ['$$factura.abonos', 0] } // Asumiendo que 'abonos' es un array de montos
-                            }
-                        }
+                    // Suma de Abonos Facturas
+                    abonosFacturas: { 
+                        $sum: '$abonosFacturas.monto' 
                     },
                     cantidadDocumentosPendientesFacturas: {
                         $size: {
@@ -272,15 +288,10 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
                             }
                         }
                     },
-                    abonosHonorarios: {
-                        $sum: {
-                            $map: {
-                                input: '$honorarios',
-                                as: 'honorario',
-                                in: { $ifNull: ['$$honorario.abonos', 0] } // Asumiendo que 'abonos' es un array de montos
-                            }
-                        }
-                    },
+                   // Suma de Abonos Honorarios
+                   abonosHonorarios: { 
+                    $sum: '$abonosHonorarios.monto' 
+                },
                     cantidadDocumentosPendientesHonorarios: {
                         $size: {
                             $filter: {
@@ -290,18 +301,19 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
                             }
                         }
                     },
-                    // Totales
-                    saldoPendienteTotal: { 
-                        $add: [
-                            { $ifNull: ['$saldoPendienteFacturas', 0] }, 
-                            { $ifNull: ['$saldoPendienteHonorarios', 0] }
-                        ]
-                    },
-                    abonosTotales: { 
-                        $add: [
+                     // Total Abonos
+                     abonosTotales: { 
+                        $add: [ 
                             { $ifNull: ['$abonosFacturas', 0] }, 
-                            { $ifNull: ['$abonosHonorarios', 0] }
-                        ]
+                            { $ifNull: ['$abonosHonorarios', 0] } 
+                        ] 
+                    },
+                    // Total Saldo Pendiente
+                    saldoPendienteTotal: { 
+                        $add: [ 
+                            { $ifNull: ['$saldoPendienteFacturas', 0] }, 
+                            { $ifNull: ['$saldoPendienteHonorarios', 0] } 
+                        ] 
                     },
                     cantidadDocumentosPendientesTotal: { 
                         $add: [
@@ -315,6 +327,10 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
                 $project: {
                     facturas: 0,
                     honorarios: 0,
+                    abonosFacturas: 0,
+                    abonosHonorarios: 0,
+                    totalFacturas: 0,
+                    totalHonorarios: 0
                     // Puedes excluir otros campos si no son necesarios
                 }
             },
@@ -365,6 +381,7 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
         res.status(500).json({ message: 'Error al obtener clientes paginados' });
     }
 });
+
 
 
 
