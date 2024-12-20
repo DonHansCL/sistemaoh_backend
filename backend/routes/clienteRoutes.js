@@ -243,17 +243,14 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
             {
                 $addFields: {
                     // Resumen Facturas
-                    totalFacturas: { 
-                        $sum: '$facturas.monto' 
-                    },
-                    totalAbonosFacturas: { 
-                        $sum: '$abonosFacturas.monto' 
-                    },
                     saldoPendienteFacturas: { 
-                        $subtract: [ 
-                            { $ifNull: ['$totalFacturas', 0] }, 
-                            { $ifNull: ['$totalAbonosFacturas', 0] } 
-                        ] 
+                        $subtract: [
+                            { $sum: '$facturas.monto' },
+                            { $sum: '$abonosFacturas.monto' }
+                        ]
+                    },
+                    abonosFacturas: { 
+                        $sum: '$abonosFacturas.monto' 
                     },
                     cantidadDocumentosPendientesFacturas: { 
                         $size: { 
@@ -268,17 +265,14 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
                     },
 
                     // Resumen Honorarios
-                    totalHonorarios: { 
-                        $sum: '$honorarios.monto' 
-                    },
-                    totalAbonosHonorarios: { 
-                        $sum: '$abonosHonorarios.monto' 
-                    },
                     saldoPendienteHonorarios: { 
-                        $subtract: [ 
-                            { $ifNull: ['$totalHonorarios', 0] }, 
-                            { $ifNull: ['$totalAbonosHonorarios', 0] } 
-                        ] 
+                        $subtract: [
+                            { $sum: '$honorarios.monto' },
+                            { $sum: '$abonosHonorarios.monto' }
+                        ]
+                    },
+                    abonosHonorarios: { 
+                        $sum: '$abonosHonorarios.monto' 
                     },
                     cantidadDocumentosPendientesHonorarios: { 
                         $size: { 
@@ -301,14 +295,8 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
                     },
                     abonosTotales: { 
                         $add: [ 
-                            { $ifNull: ['$totalAbonosFacturas', 0] }, 
-                            { $ifNull: ['$totalAbonosHonorarios', 0] } 
-                        ] 
-                    },
-                    cantidadDocumentosPendientesTotal: { 
-                        $add: [ 
-                            { $ifNull: ['$cantidadDocumentosPendientesFacturas', 0] }, 
-                            { $ifNull: ['$cantidadDocumentosPendientesHonorarios', 0] } 
+                            { $ifNull: ['$abonosFacturas', 0] }, 
+                            { $ifNull: ['$abonosHonorarios', 0] } 
                         ] 
                     }
                 }
@@ -319,9 +307,7 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
                     facturas: 0,
                     honorarios: 0,
                     abonosFacturas: 0,
-                    abonosHonorarios: 0,
-                    totalFacturas: 0,
-                    totalHonorarios: 0
+                    abonosHonorarios: 0
                 }
             },
             // Ordenar
@@ -379,6 +365,7 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
         res.status(500).json({ message: 'Error al obtener clientes paginados' });
     }
 });
+
 
 
 // Actualizar un cliente
