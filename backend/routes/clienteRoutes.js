@@ -397,6 +397,7 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
 
 
 
+
 // Actualizar un cliente
 router.put('/:id', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
     const { nombre, rut, direccion, email, saldoPendiente } = req.body;
