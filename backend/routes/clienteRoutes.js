@@ -179,7 +179,7 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
     if (isNaN(limit) || limit < 1) limit = 25;
 
     // Crear filtro de búsqueda
-    const searchRegex = new RegExp(searchTerm, 'i'); // Búsqueda insensible a mayúsculas y minúsculas
+    const searchRegex = new RegExp(searchTerm, 'i');
     const matchStage = searchTerm
         ? {
             $match: {
@@ -197,7 +197,7 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
     if (allowedSortFields.includes(sortField)) {
         sortOptions[sortField] = sortOrder === 'asc' ? 1 : -1;
     } else {
-        sortOptions['nombre'] = 1; // Orden predeterminado
+        sortOptions['nombre'] = 1;
     }
 
     try {
@@ -221,21 +221,33 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
                     as: 'honorarios'
                 }
             },
-            // Lookup Abonos para Facturas
+            // Lookup Abonos para Facturas usando pipeline
             {
                 $lookup: {
                     from: 'abonos',
-                    localField: 'facturas._id',
-                    foreignField: 'factura_id',
+                    let: { facturaIds: '$facturas._id' },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: { $in: ['$factura_id', '$$facturaIds'] }
+                            }
+                        }
+                    ],
                     as: 'abonosFacturas'
                 }
             },
-            // Lookup Abonos para Honorarios
+            // Lookup Abonos para Honorarios usando pipeline
             {
                 $lookup: {
                     from: 'abonohonorarios',
-                    localField: 'honorarios._id',
-                    foreignField: 'honorario_id',
+                    let: { honorarioIds: '$honorarios._id' },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: { $in: ['$honorario_id', '$$honorarioIds'] }
+                            }
+                        }
+                    ],
                     as: 'abonosHonorarios'
                 }
             },
@@ -293,7 +305,6 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
                             { $ifNull: ['$abonosHonorarios', 0] }
                         ]
                     },
-
                     // Total Saldo Pendiente
                     saldoPendienteTotal: {
                         $add: [
@@ -307,7 +318,9 @@ router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async
             {
                 $project: {
                     facturas: 0,
-                    honorarios: 0
+                    honorarios: 0,
+                    abonosFacturas: 0,
+                    abonosHonorarios: 0
                 }
             },
             // Ordenar
