@@ -130,17 +130,27 @@ router.get('/resumen-honorarios', verifyToken, checkRole(['ADMIN', 'FACTURACION'
 
      // **Resumen por Cliente**
      const resumenHonorariosClientes = await Honorario.aggregate([
-      {
+       {
         $group: {
           _id: "$clienteRut",
+          // Para honorarios 'pendiente' o 'abonada', sumamos (monto - total_abonado)
           saldoPendienteHonorarios: {
             $sum: {
-              $cond: [{ $in: ["$estado", ['pendiente', 'abonada']] }, "$monto", 0]
+              $cond: [
+                { $in: ["$estado", ["pendiente", "abonada"]] },
+                { $subtract: ["$monto", { $ifNull: ["$total_abonado", 0] }] },
+                0
+              ]
             }
           },
+          // Para estado 'abonada', sumamos total_abonado
           abonosHonorarios: {
             $sum: {
-              $cond: [{ $eq: ["$estado", "abonada"] }, "$monto", 0]
+              $cond: [
+                { $eq: ["$estado", "abonada"] },
+                { $ifNull: ["$total_abonado", 0] },
+                0
+              ]
             }
           }
         }
