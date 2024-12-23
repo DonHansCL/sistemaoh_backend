@@ -109,13 +109,41 @@ router.get('/resumen', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (
     ]);
     const totalAdeudado = totalAdeudadoResult.length > 0 ? totalAdeudadoResult[0].total : 0;
 
+     // **Resumen por Cliente**
+     const resumenFacturasClientes = await Factura.aggregate([
+      {
+        $group: {
+          _id: "$clienteRut",
+          saldoPendienteFacturas: {
+            $sum: {
+              $cond: [{ $in: ["$estado", ['pendiente', 'abonada']] }, "$monto", 0]
+            }
+          },
+          abonosFacturas: {
+            $sum: {
+              $cond: [{ $eq: ["$estado", "abonada"] }, "$monto", 0]
+            }
+          }
+        }
+      },
+      {
+        $project: {
+          clienteRut: "$_id",
+          saldoPendienteFacturas: 1,
+          abonosFacturas: 1,
+          _id: 0
+        }
+      }
+    ]);
+
     const resumen = {
       facturasPagadasMes,
       facturasPendientes,
       facturasTotales,
       totalFacturado,
       totalAbonos,
-      totalAdeudado
+      totalAdeudado,
+      clientes: resumenFacturasClientes // Array de resúmenes por cliente
     };
 
     res.json(resumen);
