@@ -128,13 +128,41 @@ router.get('/resumen-honorarios', verifyToken, checkRole(['ADMIN', 'FACTURACION'
     ]);
     const totalAdeudadoHonorarios = totalAdeudadoHonorariosResult.length > 0 ? totalAdeudadoHonorariosResult[0].total : 0;
 
+     // **Resumen por Cliente**
+     const resumenHonorariosClientes = await Honorario.aggregate([
+      {
+        $group: {
+          _id: "$clienteRut",
+          saldoPendienteHonorarios: {
+            $sum: {
+              $cond: [{ $in: ["$estado", ['pendiente', 'abonada']] }, "$monto", 0]
+            }
+          },
+          abonosHonorarios: {
+            $sum: {
+              $cond: [{ $eq: ["$estado", "abonada"] }, "$monto", 0]
+            }
+          }
+        }
+      },
+      {
+        $project: {
+          clienteRut: "$_id",
+          saldoPendienteHonorarios: 1,
+          abonosHonorarios: 1,
+          _id: 0
+        }
+      }
+    ]);
+
     const resumenHonorarios = {
       honorariosPagadasMes,
       honorariosPendientes,
       honorariosTotales,
       totalHonorados,
       totalAbonosHonorarios,
-      totalAdeudadoHonorarios
+      totalAdeudadoHonorarios,
+      clientes: resumenHonorariosClientes // Array de resúmenes por cliente
     };
 
     res.json(resumenHonorarios);
@@ -143,6 +171,7 @@ router.get('/resumen-honorarios', verifyToken, checkRole(['ADMIN', 'FACTURACION'
     res.status(500).json({ error: 'Error al obtener resumen de honorarios.', detalles: error.message });
   }
 });
+
 
 
 
