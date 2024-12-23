@@ -195,118 +195,15 @@ router.get('/', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, re
         : { nombre: 1 };
 
     try {
-        const pipeline = [
-            matchStage,
-            // Lookup Facturas
-            {
-                $lookup: {
-                    from: 'facturas',
-                    localField: 'rut',
-                    foreignField: 'clienteRut',
-                    as: 'facturas'
-                }
-            },
-            // Lookup Honorarios
-            {
-                $lookup: {
-                    from: 'honorarios',
-                    localField: 'rut',
-                    foreignField: 'clienteRut',
-                    as: 'honorarios'
-                }
-            },
-            // Agregar los campos necesarios con conversión a números
-            {
-                $addFields: {
-                    // Saldo Pendiente Facturas
-                    saldoPendienteFacturas: {
-                        $sum: {
-                            $map: {
-                                input: '$facturas',
-                                as: 'factura',
-                                in: {
-                                    $cond: [
-                                        { $eq: ['$$factura.estado', 'pendiente'] },
-                                        {
-                                            $subtract: [
-                                                { $toDouble: { $ifNull: ['$$factura.monto', 0] } },
-                                                { $toDouble: { $ifNull: ['$$factura.total_abonado', 0] } }
-                                            ]
-                                        },
-                                        0
-                                    ]
-                                }
-                            }
-                        }
-                    },
-                    // Cantidad de Facturas Pendientes
-                    cantidadFacturasPendientes: {
-                        $size: {
-                            $filter: {
-                                input: '$facturas',
-                                as: 'factura',
-                                cond: { $eq: ['$$factura.estado', 'pendiente'] }
-                            }
-                        }
-                    },
-                    // Saldo Pendiente Honorarios
-                    saldoPendienteHonorarios: {
-                        $sum: {
-                            $map: {
-                                input: '$honorarios',
-                                as: 'honorario',
-                                in: {
-                                    $cond: [
-                                        { $eq: ['$$honorario.estado', 'pendiente'] },
-                                        {
-                                            $subtract: [
-                                                { $toDouble: { $ifNull: ['$$honorario.monto', 0] } },
-                                                { $toDouble: { $ifNull: ['$$honorario.total_abonado', 0] } }
-                                            ]
-                                        },
-                                        0
-                                    ]
-                                }
-                            }
-                        }
-                    },
-                    // Cantidad de Honorarios Pendientes
-                    cantidadHonorariosPendientes: {
-                        $size: {
-                            $filter: {
-                                input: '$honorarios',
-                                as: 'honorario',
-                                cond: { $eq: ['$$honorario.estado', 'pendiente'] }
-                            }
-                        }
-                    },
-                    // Saldo Pendiente Total
-                    saldoPendienteTotal: {
-                        $add: [
-                            { $ifNull: ['$saldoPendienteFacturas', 0] },
-                            { $ifNull: ['$saldoPendienteHonorarios', 0] }
-                        ]
-                    }
-                }
-            },
-            // Proyección de campos
-            {
-                $project: {
-                    facturas: 0,
-                    honorarios: 0
-                }
-            },
-            // Ordenar y paginar
-            { $sort: sortOptions },
-            { $skip: (page - 1) * limit },
-            { $limit: limit }
-        ];
+        const clientes = await Cliente.find(filter)
+            .sort(sortOptions)
+            .skip((page - 1) * limit)
+            .limit(limit);
 
-        const data = await Cliente.aggregate(pipeline);
-        const total = await Cliente.countDocuments(matchStage.$match);
+        const total = await Cliente.countDocuments(filter);
 
         res.json({
-            data,
+            data: clientes,
             total,
             page,
             limit,
@@ -316,7 +213,9 @@ router.get('/', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, re
         console.error('Error al obtener clientes paginados:', error);
         res.status(500).json({ message: 'Error al obtener clientes paginados', error: error.message });
     }
-});
+})
+
+
 // Actualizar un cliente
 router.put('/:id', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
     const { nombre, rut, direccion, email, saldoPendiente } = req.body;
