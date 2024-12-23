@@ -166,7 +166,7 @@ router.get('/', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, re
     }
   });
 
- router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
+router.get('/paginated', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
     let { page = 1, limit = 25, searchTerm = '', sortField = 'nombre', sortOrder = 'asc' } = req.query;
 
     // Convertir a número y validar
@@ -177,19 +177,17 @@ router.get('/', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, re
 
     // Crear filtro de búsqueda
     const searchRegex = new RegExp(searchTerm, 'i');
-    const matchStage = searchTerm
+    const filter = searchTerm
         ? {
-            $match: {
-                $or: [
-                    { nombre: { $regex: searchRegex } },
-                    { rut: { $regex: searchRegex } }
-                ]
-            }
+            $or: [
+                { nombre: { $regex: searchRegex } },
+                { rut: { $regex: searchRegex } }
+            ]
         }
-        : { $match: {} };
+        : {};
 
     // Crear objeto de ordenación
-    const allowedSortFields = ['nombre', 'rut', 'direccion', 'email', 'saldoPendienteTotal'];
+    const allowedSortFields = ['nombre', 'rut', 'direccion', 'email'];
     const sortOptions = allowedSortFields.includes(sortField)
         ? { [sortField]: sortOrder === 'asc' ? 1 : -1 }
         : { nombre: 1 };
@@ -213,7 +211,7 @@ router.get('/', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, re
         console.error('Error al obtener clientes paginados:', error);
         res.status(500).json({ message: 'Error al obtener clientes paginados', error: error.message });
     }
-})
+});
 
 
 // Actualizar un cliente
