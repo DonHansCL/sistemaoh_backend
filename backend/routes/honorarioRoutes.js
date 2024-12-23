@@ -652,6 +652,27 @@ router.put('/abonar/:honorarioId', verifyToken, checkRole(['ADMIN', 'FACTURACION
 })
 
 
+// Ruta para eliminar masivamente honorarios
+router.delete('/eliminar-masivo', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
+  const { honorarioIds } = req.body;
+
+  if (!Array.isArray(honorarioIds) || honorarioIds.length === 0) {
+    return res.status(400).json({ error: 'No se proporcionaron IDs de honorarios.' });
+  }
+
+  try {
+    const result = await Honorario.deleteMany({ _id: { $in: honorarioIds } });
+
+    res.json({
+      message: `${result.deletedCount} honorario(s) eliminado(s) exitosamente.`,
+    });
+  } catch (error) {
+    console.error('Error al eliminar masivamente honorarios:', error);
+    res.status(500).json({ error: 'Error al eliminar masivamente honorarios.' });
+  }
+});
+
+
 // Eliminar un honorario por su ID
 router.delete('/:id', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
   const { id } = req.params;
@@ -673,25 +694,7 @@ router.delete('/:id', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (r
 })
 
 
-// Ruta para eliminar masivamente honorarios
-router.delete('/eliminar-masivo', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (req, res) => {
-  const { honorarioIds } = req.body;
 
-  if (!Array.isArray(honorarioIds) || honorarioIds.length === 0) {
-    return res.status(400).json({ error: 'No se proporcionaron IDs de honorarios.' });
-  }
-
-  try {
-    const result = await Honorario.deleteMany({ _id: { $in: honorarioIds } });
-
-    res.json({
-      message: `${result.deletedCount} honorario(s) eliminado(s) exitosamente.`,
-    });
-  } catch (error) {
-    console.error('Error al eliminar masivamente honorarios:', error);
-    res.status(500).json({ error: 'Error al eliminar masivamente honorarios.' });
-  }
-});
 
 
 module.exports = router;
