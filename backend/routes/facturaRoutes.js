@@ -114,14 +114,24 @@ router.get('/resumen', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (
       {
         $group: {
           _id: "$clienteRut",
+          // Para facturas en estado 'pendiente' o 'abonada', sumamos (monto - total_abonado)
           saldoPendienteFacturas: {
             $sum: {
-              $cond: [{ $in: ["$estado", ['pendiente', 'abonada']] }, "$monto", 0]
+              $cond: [
+                { $in: ["$estado", ["pendiente", "abonada"]] },
+                { $subtract: ["$monto", { $ifNull: ["$total_abonado", 0] }] },
+                0
+              ]
             }
           },
+          // Para estado 'abonada', sumamos total_abonado (no el monto completo)
           abonosFacturas: {
             $sum: {
-              $cond: [{ $eq: ["$estado", "abonada"] }, "$monto", 0]
+              $cond: [
+                { $eq: ["$estado", "abonada"] },
+                { $ifNull: ["$total_abonado", 0] },
+                0
+              ]
             }
           }
         }
