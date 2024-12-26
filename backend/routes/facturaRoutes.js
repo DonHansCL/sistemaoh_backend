@@ -545,8 +545,8 @@ router.put('/pagar-masivo', verifyToken, checkRole(['ADMIN', 'FACTURACION']), as
 
     res.json({
       //message: `${result.nModified} factura(s) actualizada(s) a pagada.`,
-      message: `${resultado.modifiedCount} factura(s) actualizada(s) a pagada.`,
-      modifiedCount: resultado.modifiedCount
+      message: `${result.modifiedCount} factura(s) actualizada(s) a pagada.`,
+      modifiedCount: result.modifiedCount
     });
   } catch (error) {
     console.error('Error al pagar masivamente facturas:', error);
