@@ -531,7 +531,7 @@ router.put('/pagar-masivo', verifyToken, checkRole(['ADMIN', 'FACTURACION']), as
 
   try {
     const result = await Factura.updateMany(
-     { _id: { $in: facturaIds } },
+     { _id: { $in: facturaIds }, estado: { $ne: 'pagada' } },
       [
         {
           $set: {
