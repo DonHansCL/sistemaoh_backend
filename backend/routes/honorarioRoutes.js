@@ -503,13 +503,21 @@ router.put('/pagar-masivo', verifyToken, checkRole(['ADMIN', 'FACTURACION']), as
 
     // Actualizar los honorarios a estado 'pagada' y asignar fechaPago
     const result = await Honorario.updateMany(
-      { _id: { $in: honorarioIds }, estado: { $ne: 'pagada' } },
-      { $set: { estado: 'pagada', fechaPago: new Date() } }
-    );
-
-    res.json({
-      message: `${result.nModified} honorario(s) actualizado(s) a pagada.`,
-    });
+       { _id: { $in: honorarioIds }, estado: { $ne: 'pagada' } },
+       [
+        {
+          $set: {
+            estado: 'pagada',
+            fechaPago: new Date(),
+            total_abonado: "$monto" // Referencia al campo 'monto' del documento
+          }
+        }
+      ]
+     );
+ 
+     res.json({
+      message: `${result.modifiedCount} honorario(s) actualizado(s) a pagada.`,
+      modifiedCount: result.modifiedCount
   } catch (error) {
     console.error('Error al pagar masivamente honorarios:', error);
     res.status(500).json({ error: 'Error al pagar masivamente honorarios.', detalles: error.message });
