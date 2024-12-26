@@ -518,6 +518,7 @@ router.put('/pagar-masivo', verifyToken, checkRole(['ADMIN', 'FACTURACION']), as
      res.json({
       message: `${result.modifiedCount} honorario(s) actualizado(s) a pagada.`,
       modifiedCount: result.modifiedCount
+       });
   } catch (error) {
     console.error('Error al pagar masivamente honorarios:', error);
     res.status(500).json({ error: 'Error al pagar masivamente honorarios.', detalles: error.message });
