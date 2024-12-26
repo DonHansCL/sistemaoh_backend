@@ -531,11 +531,12 @@ router.put('/pagar-masivo', verifyToken, checkRole(['ADMIN', 'FACTURACION']), as
 
   try {
     const result = await Factura.updateMany(
-     { _id: { $in: facturaIds }, estado: { $ne: 'pagada' } },
+      { _id: { $in: facturaIds }, estado: { $ne: 'pagada' } },
       [
         {
           $set: {
             estado: 'pagada',
+            fechaPago: new Date(),
             total_abonado: '$monto' // Establece total_abonado igual a monto
           }
         }
@@ -543,7 +544,9 @@ router.put('/pagar-masivo', verifyToken, checkRole(['ADMIN', 'FACTURACION']), as
     );
 
     res.json({
-      message: `${result.nModified} factura(s) actualizada(s) a pagada.`,
+      //message: `${result.nModified} factura(s) actualizada(s) a pagada.`,
+      message: `${resultado.modifiedCount} factura(s) actualizada(s) a pagada.`,
+      modifiedCount: resultado.modifiedCount
     });
   } catch (error) {
     console.error('Error al pagar masivamente facturas:', error);
