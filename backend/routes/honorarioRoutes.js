@@ -152,6 +152,15 @@ router.get('/resumen-honorarios', verifyToken, checkRole(['ADMIN', 'FACTURACION'
                 0
               ]
             }
+          },
+          cantidadHonorariosPendientes: {
+            $sum: {
+              $cond: [
+                { $in: ["$estado", ["pendiente", "abonada"]] },
+                1,
+                0
+              ]
+            }
           }
         }
       },
@@ -160,6 +169,7 @@ router.get('/resumen-honorarios', verifyToken, checkRole(['ADMIN', 'FACTURACION'
           clienteRut: "$_id",
           saldoPendienteHonorarios: 1,
           abonosHonorarios: 1,
+          cantidadHonorariosPendientes: 1,
           _id: 0
         }
       }
