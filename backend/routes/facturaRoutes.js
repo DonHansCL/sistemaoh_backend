@@ -133,14 +133,25 @@ router.get('/resumen', verifyToken, checkRole(['ADMIN', 'FACTURACION']), async (
                 0
               ]
             }
+          },
+          cantidadFacturasPendientes: {
+            $sum: {
+              $cond: [
+                { $in: ["$estado", ["pendiente", "abonada"]] },
+                1,
+                0
+              ]
+            }
           }
         }
       },
+      
       {
         $project: {
           clienteRut: "$_id",
           saldoPendienteFacturas: 1,
           abonosFacturas: 1,
+          cantidadFacturasPendientes: 1,
           _id: 0
         }
       }
